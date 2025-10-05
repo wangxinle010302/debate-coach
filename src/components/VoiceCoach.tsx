@@ -1,90 +1,154 @@
-'use client'
+'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
-type ResultItem = { timestamp: number; text: string }
-type ApiResp = { ok: true; feedback: string } | { ok: false; error: string }
+type Scores = { clarity:number; logic:number; evidence:number; civility:number };
+type CoachResp = { summary:string; tips:string[]; scores:Scores };
+
+declare global {
+  interface Window {
+    webkitSpeechRecognition?: any;
+    SpeechRecognition?: any;
+  }
+}
 
 export default function VoiceCoach() {
-  const [listening, setListening] = useState(false)
-  const [recognizing, setRecognizing] = useState(false)
-  const [results, setResults] = useState<ResultItem[]>([])
-  const [coach, setCoach] = useState<string>('')
-  const recRef = useRef<any>(null)
+  const [topic, setTopic] = useState('Should schools require uniforms?');
+  const [listening, setListening] = useState(false);
+  const [recognizing, setRecognizing] = useState(false);
+  const [interim, setInterim] = useState('');
+  const [transcript, setTranscript] = useState('');
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+  const [wpm, setWpm] = useState<number | null>(null);
+  const [result, setResult] = useState<CoachResp | null>(null);
+  const recRef = useRef<any>(null);
 
-  const SpeechRecognition = useMemo(() => {
-    const w = typeof window !== 'undefined' ? (window as any) : undefined
-    return w?.webkitSpeechRecognition || w?.SpeechRecognition
-  }, [])
+  const SR =
+    typeof window !== 'undefined'
+      ? window.SpeechRecognition || window.webkitSpeechRecognition
+      : null;
 
   useEffect(() => {
-    if (!SpeechRecognition) return
-    const rec = new SpeechRecognition()
-    recRef.current = rec
-    rec.lang = 'en-US'
-    rec.interimResults = true
-    rec.continuous = true
+    if (!startedAt) return;
+    const words = transcript.trim().split(/\s+/).filter(Boolean).length;
+    const seconds = Math.max(1, (Date.now() - startedAt) / 1000);
+    setWpm(Number(((words / seconds) * 60).toFixed(1)));
+  }, [transcript, startedAt]);
 
-    rec.onstart = () => setRecognizing(true)
-    rec.onend = () => { setRecognizing(false); setListening(false) }
-    rec.onerror = (e: any) => console.log('rec error', e)
-
-    rec.onresult = (ev: any) => {
-      const last = ev.results[ev.results.length - 1]
-      const text = last[0]?.transcript || ''
-      if (text.trim()) {
-        setResults(prev => [...prev, { timestamp: Date.now(), text }])
-      }
+  const start = useCallback(() => {
+    if (!SR) {
+      alert('Your browser does not support Web Speech API. You can type instead.');
+      return;
     }
+    setListening(true);
+    setRecognizing(true);
+    setResult(null);
+    setInterim('');
+    setTranscript('');
+    setStartedAt(Date.now());
 
-    return () => { try { rec.stop() } catch {} }
-  }, [SpeechRecognition])
+    const rec = new SR();
+    rec.lang = 'en-US';
+    rec.continuous = true;
+    rec.interimResults = true;
 
-  const start = () => { try { recRef.current?.start(); setListening(true) } catch {} }
-  const stop = () => { try { recRef.current?.stop(); setListening(false) } catch {} }
+    rec.onresult = (e: any) => {
+      let finalText = '';
+      let interimText = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const text = e.results[i][0].transcript;
+        if (e.results[i].isFinal) finalText += text + ' ';
+        else interimText += text;
+      }
+      if (finalText) setTranscript((t) => (t + ' ' + finalText).trim());
+      setInterim(interimText);
+    };
+    rec.onend = () => { setRecognizing(false); setListening(false); };
+    rec.onerror = () => { setRecognizing(false); setListening(false); };
 
-  const handleCoach = async () => {
-    const transcript = results.map(r => r.text).join(' ')
-    const res = await fetch('/api/coach', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ transcript, mode: 'voice' })
-    })
-    const data = (await res.json()) as ApiResp
-    if ('ok' in data && data.ok) setCoach(data.feedback)
-    else setCoach(`Error: ${(data as any).error || 'unknown'}`)
-  }
+    rec.start();
+    recRef.current = rec;
+  }, [SR]);
+
+  const stop = useCallback(() => {
+    if (recRef.current) { try { recRef.current.stop(); } catch {} }
+    setRecognizing(false);
+    setListening(false);
+  }, []);
+
+  const clearAll = () => {
+    stop();
+    setInterim('');
+    setTranscript('');
+    setResult(null);
+    setWpm(null);
+    setStartedAt(null);
+  };
+
+  const score = async () => {
+    const content = (transcript + ' ' + interim).trim();
+    if (!content) return alert('Please speak or type something first.');
+    setResult(null);
+    try {
+      const res = await fetch('/api/score', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic, transcript: content })
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data: CoachResp = await res.json();
+      setResult(data);
+    } catch (e: any) {
+      alert(e.message || 'Failed to score');
+    }
+  };
 
   return (
-    <div className="card">
-      <h2>Debate Voice Coach (MVP)</h2>
+    <div className="card col" style={{gap:16}}>
+      <div className="row">
+        <input className="input" style={{flex:1,minWidth:260}}
+          value={topic} onChange={(e)=>setTopic(e.target.value)} placeholder="Topic or motion" />
+        <span className="badge">{wpm ? `${wpm} WPM` : 'WPM n/a'}</span>
+      </div>
 
       <div className="row">
-        <button className="btn btn-primary" onClick={start} disabled={listening || recognizing || !SpeechRecognition}>
-          🎙️ Start
-        </button>
-        <button className="btn" onClick={stop} disabled={!listening && !recognizing}>⏹ Stop</button>
-        {!SpeechRecognition && <span className="muted">Your browser does not support Web Speech API.</span>}
+        <button className="btn btn-primary" onClick={start} disabled={listening || recognizing}>▶ Start</button>
+        <button className="btn" onClick={stop} disabled={!recognizing && !listening}>⏹ Stop</button>
+        <button className="btn" onClick={clearAll}>Clear</button>
+        <button className="btn" onClick={score}>💡 Get Feedback</button>
       </div>
 
-      <div className="bubble">
-        <div className="bubble-header">Live Transcript</div>
-        <div className="bubble-body">
-          {results.length === 0 ? <div className="muted">Nothing yet…</div> :
-            results.slice(-8).map(r => <div key={r.timestamp}>{r.text}</div>)}
+      <div className="grid">
+        <div className="col">
+          <label className="muted">Your speech (editable)</label>
+          <textarea className="textarea" value={transcript}
+            onChange={(e)=>setTranscript(e.target.value)} placeholder="Speak or type here..." />
+          {!!interim && <div className="bubble muted">Interim: {interim}</div>}
         </div>
-        <div className="bubble-footer">
-          <button className="btn" onClick={() => setResults([])}>Clear</button>
-          <button className="btn btn-primary" onClick={handleCoach} disabled={results.length === 0}>Get Coaching</button>
+
+        <div className="col">
+          <label className="muted">Feedback</label>
+          {!result && <div className="bubble">Press <b>Get Feedback</b> to analyse your speech.</div>}
+          {result && (
+            <div className="col" style={{gap:12}}>
+              <div className="bubble"><b>Summary:</b> {result.summary}</div>
+              <div className="bubble">
+                <b>Scores (1–5)</b>
+                <ul>
+                  <li>Clarity: {result.scores.clarity}</li>
+                  <li>Logic: {result.scores.logic}</li>
+                  <li>Evidence: {result.scores.evidence}</li>
+                  <li>Civility: {result.scores.civility}</li>
+                </ul>
+              </div>
+              <div className="bubble">
+                <b>Tips</b>
+                <ul>{result.tips.map((t,i)=><li key={i}>{t}</li>)}</ul>
+              </div>
+            </div>
+          )}
         </div>
       </div>
-
-      {coach && (
-        <div className="bubble">
-          <div className="bubble-header">Coach Feedback</div>
-          <div className="bubble-body"><pre style={{ whiteSpace: 'pre-wrap' }}>{coach}</pre></div>
-        </div>
-      )}
     </div>
-  )
+  );
 }
