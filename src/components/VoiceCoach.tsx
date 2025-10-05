@@ -1,90 +1,90 @@
-'use client';
-import React from 'react';
-import VoiceInput from '@/components/VoiceInput';
+'use client'
 
-type Msg = { role: 'user'|'coach', text: string };
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+
+type ResultItem = { timestamp: number; text: string }
+type ApiResp = { ok: true; feedback: string } | { ok: false; error: string }
 
 export default function VoiceCoach() {
-  const [msgs, setMsgs] = React.useState<Msg[]>([]);
-  const [text, setText] = React.useState('');
-  const [interim, setInterim] = React.useState('');
-  const [loading, setLoading] = React.useState(false);
+  const [listening, setListening] = useState(false)
+  const [recognizing, setRecognizing] = useState(false)
+  const [results, setResults] = useState<ResultItem[]>([])
+  const [coach, setCoach] = useState<string>('')
+  const recRef = useRef<any>(null)
 
-  const send = async (payload?: string) => {
-    const content = (payload ?? text ?? '').trim() || interim.trim();
-    if (!content) return;
-    setMsgs(m => [...m, { role: 'user', text: content }]);
-    setText(''); setInterim(''); setLoading(true);
+  const SpeechRecognition = useMemo(() => {
+    const w = typeof window !== 'undefined' ? (window as any) : undefined
+    return w?.webkitSpeechRecognition || w?.SpeechRecognition
+  }, [])
 
-    try {
-      const res = await fetch('/api/coach', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: content })
-      });
-      const data = await res.json();
-      setMsgs(m => [...m, { role: 'coach', text: data.reply }]);
-    } catch (e:any) {
-      setMsgs(m => [...m, { role: 'coach', text: 'Server error, please try again.' }]);
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (!SpeechRecognition) return
+    const rec = new SpeechRecognition()
+    recRef.current = rec
+    rec.lang = 'en-US'
+    rec.interimResults = true
+    rec.continuous = true
+
+    rec.onstart = () => setRecognizing(true)
+    rec.onend = () => { setRecognizing(false); setListening(false) }
+    rec.onerror = (e: any) => console.log('rec error', e)
+
+    rec.onresult = (ev: any) => {
+      const last = ev.results[ev.results.length - 1]
+      const text = last[0]?.transcript || ''
+      if (text.trim()) {
+        setResults(prev => [...prev, { timestamp: Date.now(), text }])
+      }
     }
-  };
+
+    return () => { try { rec.stop() } catch {} }
+  }, [SpeechRecognition])
+
+  const start = () => { try { recRef.current?.start(); setListening(true) } catch {} }
+  const stop = () => { try { recRef.current?.stop(); setListening(false) } catch {} }
+
+  const handleCoach = async () => {
+    const transcript = results.map(r => r.text).join(' ')
+    const res = await fetch('/api/coach', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ transcript, mode: 'voice' })
+    })
+    const data = (await res.json()) as ApiResp
+    if ('ok' in data && data.ok) setCoach(data.feedback)
+    else setCoach(`Error: ${(data as any).error || 'unknown'}`)
+  }
 
   return (
-    <div className="stack gap-16">
-      <section className="stack gap-8">
-        <h1>Debate Coach (MVP)</h1>
-        <p className="muted">
-          Speak or type your argument. The coach will rebut and give a tip.
-          (Mic works best on desktop Chrome/Edge.)
-        </p>
-      </section>
+    <div className="card">
+      <h2>Debate Voice Coach (MVP)</h2>
 
-      <section className="grid-2 gap-16">
-        <div className="card">
-          <h2>Conversation</h2>
-          <div className="chat">
-            {msgs.map((m, i) => (
-              <div key={i} className={`bubble ${m.role}`}>
-                <div className="from">{m.role === 'user' ? 'You' : 'Coach'}</div>
-                <div>{m.text}</div>
-              </div>
-            ))}
-            {interim && <div className="bubble user muted">…{interim}</div>}
-          </div>
-        </div>
+      <div className="row">
+        <button className="btn btn-primary" onClick={start} disabled={listening || recognizing || !SpeechRecognition}>
+          🎙️ Start
+        </button>
+        <button className="btn" onClick={stop} disabled={!listening && !recognizing}>⏹ Stop</button>
+        {!SpeechRecognition && <span className="muted">Your browser does not support Web Speech API.</span>}
+      </div>
 
-        <div className="card">
-          <h2>Input</h2>
-          <textarea
-            value={text}
-            onChange={e => setText(e.target.value)}
-            placeholder="Type your argument or use the mic…"
-            className="textarea"
-          />
-          <div className="row gap-8">
-            <VoiceInput
-              lang="en-US"
-              onFinal={(t) => setText(prev => prev ? prev + ' ' + t : t)}
-              onInterim={setInterim}
-              labelIdle="🎤 Speak (EN)"
-              labelRec="Stop"
-            />
-            <VoiceInput
-              lang="zh-CN"
-              onFinal={(t) => setText(prev => prev ? prev + ' ' + t : t)}
-              onInterim={setInterim}
-              labelIdle="🎤 说话(中文)"
-              labelRec="停止"
-            />
-            <button className="btn btn-dark" onClick={() => send()} disabled={loading}>
-              {loading ? 'Sending…' : 'Send'}
-            </button>
-          </div>
-          <div className="hint">Tip: you can mix typing + voice. Interim text shows in grey.</div>
+      <div className="bubble">
+        <div className="bubble-header">Live Transcript</div>
+        <div className="bubble-body">
+          {results.length === 0 ? <div className="muted">Nothing yet…</div> :
+            results.slice(-8).map(r => <div key={r.timestamp}>{r.text}</div>)}
         </div>
-      </section>
+        <div className="bubble-footer">
+          <button className="btn" onClick={() => setResults([])}>Clear</button>
+          <button className="btn btn-primary" onClick={handleCoach} disabled={results.length === 0}>Get Coaching</button>
+        </div>
+      </div>
+
+      {coach && (
+        <div className="bubble">
+          <div className="bubble-header">Coach Feedback</div>
+          <div className="bubble-body"><pre style={{ whiteSpace: 'pre-wrap' }}>{coach}</pre></div>
+        </div>
+      )}
     </div>
-  );
+  )
 }

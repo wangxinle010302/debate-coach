@@ -1,47 +1,47 @@
-import { NextResponse } from 'next/server';
+// src/app/api/coach/route.ts
+import { NextResponse } from 'next/server'
 
-const SYSTEM_PROMPT = `
-You are a concise debate coach. For the user's statement:
-1) Give a short rebuttal (2-3 sentences).
-2) Then one actionable tip starting with "Tip:".
-Keep tone supportive, but point out logic gaps. If the user speaks Chinese, reply in Chinese.
-`;
+type CoachInput = {
+  transcript: string
+  mode?: 'text' | 'voice'
+}
+
+async function runRealLLM(prompt: string) {
+  // 动态 import，避免在构建阶段直接触发 SDK
+  const { OpenAI } = await import('openai')
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+
+  const msg = await client.chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages: [
+      { role: 'system', content: 'You are a strict yet helpful debate coach.' },
+      { role: 'user', content: prompt }
+    ]
+  })
+
+  return msg.choices?.[0]?.message?.content ?? 'No response.'
+}
+
+function runMock(prompt: string) {
+  // 简单兜底，保证 API 总有返回
+  return `Mock feedback for: ${prompt.slice(0, 120)}... \n- Claim clarity: 3/5 \n- Evidence: 2/5 \n- Logic: 3/5 \nTip: add a concrete source and a counterargument.`
+}
 
 export async function POST(req: Request) {
-  const { message } = await req.json();
-  const apiKey = process.env.OPENAI_API_KEY;
-
-  // 没有 Key：返回 mock，保证可用
-  if (!apiKey) {
-    const mock = `Rebuttal: Consider providing a source and addressing the counterexample where this fails.\nTip: 用“主张-证据-影响”结构重述一遍（先下结论，再给证据，再说影响）。`;
-    return NextResponse.json({ reply: mock });
-  }
-
   try {
-    const r = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: String(message || '') }
-        ],
-        temperature: 0.7,
-      })
-    });
+    const body = (await req.json()) as CoachInput
+    const text = body.transcript?.trim() || ''
+    if (!text) return NextResponse.json({ error: 'Empty transcript' }, { status: 400 })
 
-    if (!r.ok) {
-      const txt = await r.text();
-      return NextResponse.json({ reply: `API error: ${txt.slice(0, 200)}` }, { status: 500 });
+    let feedback = ''
+    if (process.env.OPENAI_API_KEY) {
+      feedback = await runRealLLM(`Evaluate this debate turn and give 3 actionable tips:\n${text}`)
+    } else {
+      feedback = runMock(text)
     }
-    const data = await r.json();
-    const reply = data.choices?.[0]?.message?.content ?? 'No reply.';
-    return NextResponse.json({ reply });
+
+    return NextResponse.json({ ok: true, feedback })
   } catch (e: any) {
-    return NextResponse.json({ reply: 'Server request failed.' }, { status: 500 });
+    return NextResponse.json({ ok: false, error: e?.message ?? 'Unknown error' }, { status: 500 })
   }
 }

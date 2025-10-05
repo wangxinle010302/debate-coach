@@ -1,11 +1,9 @@
-import VoiceCoach from '@/components/VoiceCoach';
+import VoiceCoach from '@/components/VoiceCoach'
 
-export const dynamic = 'force-dynamic';
-
-export default function DebatePage() {
+export default function Page() {
   return (
     <main className="container">
       <VoiceCoach />
     </main>
-  );
+  )
 }
