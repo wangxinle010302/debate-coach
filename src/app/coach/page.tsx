@@ -1,17 +1,16 @@
 'use client';
 
-// src/app/coach/page.tsx
-import Consent from "@/components/Consent";
-import dynamic from "next/dynamic";
-
-const VoiceCoach = dynamic(() => import("@/components/VoiceCoach"), { ssr:false });
+import Consent from '@/components/Consent';
+import VoiceCoach from '@/components/VoiceCoach';
 
 export default function CoachPage() {
   return (
-    <>
+    <main className="container">
+      <h1>Debate Voice Coach (MVP)</h1>
+      <p className="muted">Speak → auto-transcribe → edit → get feedback.</p>
+
       <Consent />
       <VoiceCoach />
-    </>
+    </main>
   );
 }
-git add src/app/coach/page.tsx
