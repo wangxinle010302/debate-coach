@@ -1,3 +1,5 @@
+'use client';
+
 // src/app/coach/page.tsx
 import Consent from "@/components/Consent";
 import dynamic from "next/dynamic";
@@ -12,3 +14,4 @@ export default function CoachPage() {
     </>
   );
 }
+git add src/app/coach/page.tsx
