@@ -1,10 +1,9 @@
 // next.config.ts
-import type { NextConfig } from 'next'
+import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  eslint: { ignoreDuringBuilds: true },
-  typescript: { ignoreBuildErrors: true },
-  experimental: { typedRoutes: false }
-}
+  reactStrictMode: true,
+  experimental: { typedRoutes: true },
+};
 
-export default nextConfig
+export default nextConfig;

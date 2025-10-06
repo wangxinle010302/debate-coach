@@ -1,154 +1,144 @@
-'use client';
+"use client";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+const TOPICS = [
+  "Should schools require uniforms?",
+  "Should social media have age verification?",
+  "Is AI a net positive for education?",
+  "Should homework be banned?",
+  "Should universities be test-optional?",
+  "Should voting age be lowered to 16?"
+];
 
-type Scores = { clarity:number; logic:number; evidence:number; civility:number };
-type CoachResp = { summary:string; tips:string[]; scores:Scores };
+type Metrics = { wpm:number; pauseCount:number; words:number; ms:number };
 
-declare global {
-  interface Window {
-    webkitSpeechRecognition?: any;
-    SpeechRecognition?: any;
-  }
+function calcMetrics(text:string, ms:number): Metrics {
+  const words = text.trim().split(/\s+/).filter(Boolean).length;
+  const minutes = Math.max(ms/60000, 1/60);
+  const wpm = Math.round(words / minutes);
+  const pauseCount = (text.match(/(\.{3,}|\s{4,})/g) || []).length;
+  return { wpm, pauseCount, words, ms };
 }
 
 export default function VoiceCoach() {
-  const [topic, setTopic] = useState('Should schools require uniforms?');
+  const [mounted, setMounted] = useState(false);
+  const [topic, setTopic] = useState(TOPICS[0]);
+  const [transcript, setTranscript] = useState("");
   const [listening, setListening] = useState(false);
   const [recognizing, setRecognizing] = useState(false);
-  const [interim, setInterim] = useState('');
-  const [transcript, setTranscript] = useState('');
-  const [startedAt, setStartedAt] = useState<number | null>(null);
-  const [wpm, setWpm] = useState<number | null>(null);
-  const [result, setResult] = useState<CoachResp | null>(null);
-  const recRef = useRef<any>(null);
+  const [metrics, setMetrics] = useState<Metrics>({ wpm:0,pauseCount:0,words:0,ms:0 });
+  const [feedback, setFeedback] = useState<string>("Press Get Feedback to analyse your speech.");
+  const [error, setError] = useState<string>("");
 
-  const SR =
-    typeof window !== 'undefined'
-      ? window.SpeechRecognition || window.webkitSpeechRecognition
-      : null;
+  const recogRef = useRef<any>(null);
+  const startedAt = useRef<number | null>(null);
 
-  useEffect(() => {
-    if (!startedAt) return;
-    const words = transcript.trim().split(/\s+/).filter(Boolean).length;
-    const seconds = Math.max(1, (Date.now() - startedAt) / 1000);
-    setWpm(Number(((words / seconds) * 60).toFixed(1)));
-  }, [transcript, startedAt]);
-
-  const start = useCallback(() => {
-    if (!SR) {
-      alert('Your browser does not support Web Speech API. You can type instead.');
-      return;
-    }
-    setListening(true);
-    setRecognizing(true);
-    setResult(null);
-    setInterim('');
-    setTranscript('');
-    setStartedAt(Date.now());
-
-    const rec = new SR();
-    rec.lang = 'en-US';
-    rec.continuous = true;
-    rec.interimResults = true;
-
-    rec.onresult = (e: any) => {
-      let finalText = '';
-      let interimText = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const text = e.results[i][0].transcript;
-        if (e.results[i].isFinal) finalText += text + ' ';
-        else interimText += text;
-      }
-      if (finalText) setTranscript((t) => (t + ' ' + finalText).trim());
-      setInterim(interimText);
-    };
-    rec.onend = () => { setRecognizing(false); setListening(false); };
-    rec.onerror = () => { setRecognizing(false); setListening(false); };
-
-    rec.start();
-    recRef.current = rec;
-  }, [SR]);
-
-  const stop = useCallback(() => {
-    if (recRef.current) { try { recRef.current.stop(); } catch {} }
-    setRecognizing(false);
-    setListening(false);
+  const SpeechRecognition = useMemo(() => {
+    if (typeof window === "undefined") return undefined;
+    // @ts-ignore
+    return window.SpeechRecognition || window.webkitSpeechRecognition;
   }, []);
 
-  const clearAll = () => {
-    stop();
-    setInterim('');
-    setTranscript('');
-    setResult(null);
-    setWpm(null);
-    setStartedAt(null);
-  };
+  useEffect(() => { setMounted(true); }, []);
 
-  const score = async () => {
-    const content = (transcript + ' ' + interim).trim();
-    if (!content) return alert('Please speak or type something first.');
-    setResult(null);
-    try {
-      const res = await fetch('/api/score', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic, transcript: content })
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const data: CoachResp = await res.json();
-      setResult(data);
-    } catch (e: any) {
-      alert(e.message || 'Failed to score');
+  function start() {
+    setError("");
+    if (!SpeechRecognition) {
+      setError("SpeechRecognition not supported. Please use Chrome/Edge on desktop or recent Android.");
+      return;
     }
-  };
+    try {
+      const recog = new SpeechRecognition();
+      recogRef.current = recog;
+      recog.lang = "en-US";
+      recog.interimResults = true;
+      recog.continuous = true;
+
+      recog.onstart = () => { setListening(true); setRecognizing(true); startedAt.current = Date.now(); };
+      recog.onerror = (e:any) => { setError(e?.error || "mic error"); setRecognizing(false); setListening(false); };
+      recog.onend = () => {
+        setRecognizing(false); setListening(false);
+        if (startedAt.current) setMetrics(calcMetrics(transcript, Date.now()-startedAt.current));
+      };
+      recog.onresult = (event:any) => {
+        let full = "";
+        for (let i=0; i<event.results.length; i++){
+          full += event.results[i][0].transcript + " ";
+        }
+        setTranscript(full.trim());
+        if (startedAt.current) setMetrics(calcMetrics(full, Date.now()-startedAt.current));
+      };
+
+      recog.start();
+    } catch (e:any) {
+      setError(e?.message || "failed to start mic");
+    }
+  }
+
+  function stop() {
+    try { recogRef.current?.stop(); } catch {}
+  }
+
+  function clearAll() {
+    setTranscript(""); setFeedback("Press Get Feedback to analyse your speech.");
+    setMetrics({ wpm:0, pauseCount:0, words:0, ms:0 }); setError("");
+  }
+
+  async function getFeedback() {
+    setFeedback("Thinking…");
+    const res = await fetch("/api/analyze",{ method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ topic, text: transcript }) });
+    if (!res.ok) { setFeedback("Server error. Try again."); return; }
+    const data = await res.json();
+    const lines = [
+      `Score (0–5): clarity ${data.scores.clarity}, logic ${data.scores.logic}, evidence ${data.scores.evidence}, civility ${data.scores.civility}`,
+      `Focus: ${data.focus}`,
+      `Tips:`,
+      `• ${data.tips[0]}`,
+      `• ${data.tips[1]}`,
+      `• ${data.tips[2]}`,
+      `• ${data.tips[3]}`
+    ];
+    setFeedback(lines.join("\n"));
+  }
 
   return (
-    <div className="card col" style={{gap:16}}>
-      <div className="row">
-        <input className="input" style={{flex:1,minWidth:260}}
-          value={topic} onChange={(e)=>setTopic(e.target.value)} placeholder="Topic or motion" />
-        <span className="badge">{wpm ? `${wpm} WPM` : 'WPM n/a'}</span>
+    <div className="card">
+      <h2>Debate Voice Coach (MVP)</h2>
+      <p className="muted">Speak → auto-transcribe → edit text → get feedback.</p>
+
+      <div className="row" style={{margin:"8px 0 6px"}}>
+        <select value={topic} onChange={e=>setTopic(e.target.value)}>
+          {TOPICS.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
+        <span className="kpi">
+          <span className="badge">WPM {metrics.wpm || "n/a"}</span>
+          <span className="badge">Pauses {metrics.pauseCount}</span>
+          <span className="badge">Words {metrics.words}</span>
+        </span>
       </div>
 
-      <div className="row">
-        <button className="btn btn-primary" onClick={start} disabled={listening || recognizing}>▶ Start</button>
-        <button className="btn" onClick={stop} disabled={!recognizing && !listening}>⏹ Stop</button>
+      <div className="row" style={{marginBottom:8}}>
+        <button className="btn btn-primary" onClick={start}
+          disabled={!mounted || listening || recognizing}>
+          ▶ Start
+        </button>
+        <button className="btn" onClick={stop} disabled={!listening}>■ Stop</button>
         <button className="btn" onClick={clearAll}>Clear</button>
-        <button className="btn" onClick={score}>💡 Get Feedback</button>
+        <button className="btn" onClick={getFeedback} disabled={transcript.trim().length<5}>
+          💡 Get Feedback
+        </button>
       </div>
 
-      <div className="grid">
-        <div className="col">
-          <label className="muted">Your speech (editable)</label>
-          <textarea className="textarea" value={transcript}
-            onChange={(e)=>setTranscript(e.target.value)} placeholder="Speak or type here..." />
-          {!!interim && <div className="bubble muted">Interim: {interim}</div>}
-        </div>
+      {error && <p style={{color:"var(--red)"}}>{error}</p>}
 
-        <div className="col">
-          <label className="muted">Feedback</label>
-          {!result && <div className="bubble">Press <b>Get Feedback</b> to analyse your speech.</div>}
-          {result && (
-            <div className="col" style={{gap:12}}>
-              <div className="bubble"><b>Summary:</b> {result.summary}</div>
-              <div className="bubble">
-                <b>Scores (1–5)</b>
-                <ul>
-                  <li>Clarity: {result.scores.clarity}</li>
-                  <li>Logic: {result.scores.logic}</li>
-                  <li>Evidence: {result.scores.evidence}</li>
-                  <li>Civility: {result.scores.civility}</li>
-                </ul>
-              </div>
-              <div className="bubble">
-                <b>Tips</b>
-                <ul>{result.tips.map((t,i)=><li key={i}>{t}</li>)}</ul>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+      <textarea rows={6} className="input"
+        placeholder="Speak or type here…"
+        value={transcript}
+        onChange={e=>setTranscript(e.target.value)}
+      />
+      <h4>Feedback</h4>
+      <pre style={{whiteSpace:"pre-wrap"}}>{feedback}</pre>
     </div>
   );
 }
