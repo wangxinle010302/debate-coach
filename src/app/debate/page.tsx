@@ -1,38 +1,34 @@
-import VoiceCoach from "@/components/VoiceCoach";
+"use client";
+import Image from "next/image";
+import { useSearchParams } from "next/navigation";
+import { SCENES, DEFAULT_SCENE, type SceneKey } from "@/lib/scenes";
 
-// 场景 id -> PNG 文件路径
-const SCENE_FILE: Record<string, string> = {
-  "data-privacy-city": "/scenes/data-privacy-city.png",
-  "server-hall-neon": "/scenes/server-hall-neon.png",
-  "bio-ethics-lab": "/scenes/bio-ethics-lab.png",
-  "ocean-climate": "/scenes/ocean-climate.png",
-  "neon-forest": "/scenes/neon-forest.png",
-  "ai-classroom": "/scenes/ai-classroom.png",
-  "free-speech-agora": "/scenes/free-speech-agora.png",
-  "tech-labor-factory": "/scenes/tech-labor-factory.png",
-  "healthcare-ai-clinic": "/scenes/healthcare-ai-clinic.png",
-  "urban-mobility": "/scenes/urban-mobility.png",
-};
-
-export default function DebatePage({
-  searchParams,
-}: {
-  searchParams: { topic?: string; scene?: string; langA?: string; langB?: string };
-}) {
-  const topic =
-    searchParams.topic ??
-    "Should platforms filter harmful language in conversations?";
-  const scene = searchParams.scene ?? "data-privacy-city";
-  const langA = searchParams.langA ?? "en";
-  const langB = searchParams.langB ?? "en";
-  const bg = SCENE_FILE[scene] ?? SCENE_FILE["data-privacy-city"];
+export default function DebatePage() {
+  const q = useSearchParams();
+  const scene = (q.get("theme") as SceneKey) || DEFAULT_SCENE;
 
   return (
-    <div className="debate-wrap">
-      <div className="debate-bg" style={{ backgroundImage: `url(${bg})` }} aria-hidden />
-      <div className="debate-content">
-        <VoiceCoach initialTopic={topic} langA={langA} langB={langB} />
+    <main className="min-h-dvh relative">
+      <div className="absolute inset-0 -z-10">
+        <Image src={SCENES[scene].img} alt="" fill priority className="object-cover"/>
+        <div className="absolute inset-0 backdrop-blur-[6px] bg-[#0a0f1fcc]"/>
       </div>
-    </div>
+
+      <div className="container">
+        {/* 顶部条 */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="text-lg font-semibold opacity-90">Dual Debate</div>
+          <span className="text-xs px-2 py-1 rounded-full bg-white/10 border border-white/15">
+            {SCENES[scene].label}
+          </span>
+        </div>
+
+        {/* 你的左右两栏对话区用 glass 容器即可 */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <section className="glass p-4 min-h-[42vh]">{/* A 区域组件 */}</section>
+          <section className="glass p-4 min-h-[42vh]">{/* B 区域组件 */}</section>
+        </div>
+      </div>
+    </main>
   );
 }
