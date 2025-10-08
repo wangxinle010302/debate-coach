@@ -1,144 +1,142 @@
 "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
 
-const TOPICS = [
-  "Should schools require uniforms?",
-  "Should social media have age verification?",
-  "Is AI a net positive for education?",
-  "Should homework be banned?",
-  "Should universities be test-optional?",
-  "Should voting age be lowered to 16?"
-];
+import { useEffect, useRef, useState } from "react";
 
-type Metrics = { wpm:number; pauseCount:number; words:number; ms:number };
+type Msg = { role: "user" | "assistant"; content: string };
+type Props = { initialTopic?: string; langA?: string; langB?: string };
 
-function calcMetrics(text:string, ms:number): Metrics {
-  const words = text.trim().split(/\s+/).filter(Boolean).length;
-  const minutes = Math.max(ms/60000, 1/60);
-  const wpm = Math.round(words / minutes);
-  const pauseCount = (text.match(/(\.{3,}|\s{4,})/g) || []).length;
-  return { wpm, pauseCount, words, ms };
-}
+export default function VoiceCoach({ initialTopic, langA = "en", langB = "en" }: Props) {
+  const [topic, setTopic] = useState(initialTopic ?? "");
+  const [input, setInput] = useState("");
+  const [msgs, setMsgs] = useState<Msg[]>([
+    { role: "assistant", content: "Hi! Tell me your claim or opening statement, and I’ll challenge it like a real opponent—then coach you." },
+  ]);
+  const [loading, setLoading] = useState(false);
+  const listRef = useRef<HTMLDivElement>(null);
 
-export default function VoiceCoach() {
-  const [mounted, setMounted] = useState(false);
-  const [topic, setTopic] = useState(TOPICS[0]);
-  const [transcript, setTranscript] = useState("");
-  const [listening, setListening] = useState(false);
-  const [recognizing, setRecognizing] = useState(false);
-  const [metrics, setMetrics] = useState<Metrics>({ wpm:0,pauseCount:0,words:0,ms:0 });
-  const [feedback, setFeedback] = useState<string>("Press Get Feedback to analyse your speech.");
-  const [error, setError] = useState<string>("");
+  useEffect(() => {
+    listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
+  }, [msgs, loading]);
 
-  const recogRef = useRef<any>(null);
-  const startedAt = useRef<number | null>(null);
+  async function send() {
+    const text = input.trim();
+    if (!text) return;
+    const next = [...msgs, { role: "user" as const, content: text }];
+    setMsgs(next);
+    setInput("");
+    setLoading(true);
 
-  const SpeechRecognition = useMemo(() => {
-    if (typeof window === "undefined") return undefined;
-    // @ts-ignore
-    return window.SpeechRecognition || window.webkitSpeechRecognition;
-  }, []);
-
-  useEffect(() => { setMounted(true); }, []);
-
-  function start() {
-    setError("");
-    if (!SpeechRecognition) {
-      setError("SpeechRecognition not supported. Please use Chrome/Edge on desktop or recent Android.");
-      return;
-    }
     try {
-      const recog = new SpeechRecognition();
-      recogRef.current = recog;
-      recog.lang = "en-US";
-      recog.interimResults = true;
-      recog.continuous = true;
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: next,
+          topic,
+          langA,
+          langB,
+        }),
+      });
 
-      recog.onstart = () => { setListening(true); setRecognizing(true); startedAt.current = Date.now(); };
-      recog.onerror = (e:any) => { setError(e?.error || "mic error"); setRecognizing(false); setListening(false); };
-      recog.onend = () => {
-        setRecognizing(false); setListening(false);
-        if (startedAt.current) setMetrics(calcMetrics(transcript, Date.now()-startedAt.current));
-      };
-      recog.onresult = (event:any) => {
-        let full = "";
-        for (let i=0; i<event.results.length; i++){
-          full += event.results[i][0].transcript + " ";
-        }
-        setTranscript(full.trim());
-        if (startedAt.current) setMetrics(calcMetrics(full, Date.now()-startedAt.current));
-      };
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "API error");
 
-      recog.start();
-    } catch (e:any) {
-      setError(e?.message || "failed to start mic");
+      const reply = (data?.reply as string) ?? "";
+      setMsgs((prev) => [...prev, { role: "assistant", content: reply }]);
+    } catch (e: any) {
+      setMsgs((prev) => [
+        ...prev,
+        { role: "assistant", content: `⚠️ Server error: ${e?.message || e}` },
+      ]);
+    } finally {
+      setLoading(false);
     }
-  }
-
-  function stop() {
-    try { recogRef.current?.stop(); } catch {}
-  }
-
-  function clearAll() {
-    setTranscript(""); setFeedback("Press Get Feedback to analyse your speech.");
-    setMetrics({ wpm:0, pauseCount:0, words:0, ms:0 }); setError("");
-  }
-
-  async function getFeedback() {
-    setFeedback("Thinking…");
-    const res = await fetch("/api/analyze",{ method:"POST", headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify({ topic, text: transcript }) });
-    if (!res.ok) { setFeedback("Server error. Try again."); return; }
-    const data = await res.json();
-    const lines = [
-      `Score (0–5): clarity ${data.scores.clarity}, logic ${data.scores.logic}, evidence ${data.scores.evidence}, civility ${data.scores.civility}`,
-      `Focus: ${data.focus}`,
-      `Tips:`,
-      `• ${data.tips[0]}`,
-      `• ${data.tips[1]}`,
-      `• ${data.tips[2]}`,
-      `• ${data.tips[3]}`
-    ];
-    setFeedback(lines.join("\n"));
   }
 
   return (
-    <div className="card">
-      <h2>Debate Voice Coach (MVP)</h2>
-      <p className="muted">Speak → auto-transcribe → edit text → get feedback.</p>
+    <div className="container" style={{ paddingTop: 20, paddingBottom: 28 }}>
+      <div className="card" style={{ background: "rgba(255,255,255,.94)" }}>
+        <h2 style={{ margin: 0 }}>Debate Coach</h2>
+        <p className="muted" style={{ marginTop: 6 }}>
+          A: <b>{langA}</b> · B: <b>{langB}</b>
+        </p>
 
-      <div className="row" style={{margin:"8px 0 6px"}}>
-        <select value={topic} onChange={e=>setTopic(e.target.value)}>
-          {TOPICS.map(t => <option key={t} value={t}>{t}</option>)}
-        </select>
-        <span className="kpi">
-          <span className="badge">WPM {metrics.wpm || "n/a"}</span>
-          <span className="badge">Pauses {metrics.pauseCount}</span>
-          <span className="badge">Words {metrics.words}</span>
-        </span>
+        <label className="label" style={{ marginTop: 10 }}>Topic</label>
+        <input
+          className="input"
+          value={topic}
+          onChange={(e) => setTopic(e.target.value)}
+          placeholder="Type your debate motion…"
+        />
+
+        <div
+          ref={listRef}
+          style={{
+            height: 320,
+            overflowY: "auto",
+            border: "1px solid #e5e7eb",
+            borderRadius: 12,
+            padding: 12,
+            marginTop: 12,
+            background: "#fff",
+          }}
+        >
+          {msgs.map((m, i) => (
+            <div
+              key={i}
+              style={{
+                display: "flex",
+                justifyContent: m.role === "user" ? "flex-end" : "flex-start",
+                margin: "6px 0",
+              }}
+            >
+              <div
+                style={{
+                  maxWidth: "74%",
+                  padding: "8px 10px",
+                  borderRadius: 10,
+                  background: m.role === "user" ? "#111" : "#f3f4f6",
+                  color: m.role === "user" ? "#fff" : "#111",
+                  whiteSpace: "pre-wrap",
+                }}
+              >
+                {m.content}
+              </div>
+            </div>
+          ))}
+          {loading && <div className="muted">Assistant is typing…</div>}
+        </div>
+
+        <div className="row" style={{ marginTop: 12 }}>
+          <input
+            className="input"
+            style={{ flex: 1 }}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && send()}
+            placeholder="Say your point… (press Enter to send)"
+          />
+          <button className="btn btn-primary" onClick={send} disabled={loading || !topic.trim()}>
+            Send
+          </button>
+        </div>
+
+        <div className="row" style={{ marginTop: 10 }}>
+          <button
+            className="btn"
+            onClick={() => {
+              setMsgs([{ role: "assistant", content: "Reset. Tell me your opening claim." }]);
+              setInput("");
+            }}
+          >
+            Reset
+          </button>
+        </div>
+
+        <p className="muted" style={{ marginTop: 8, fontSize: 12 }}>
+          Tip: keep the topic short and concrete; I’ll push you with counter-arguments and feedback.
+        </p>
       </div>
-
-      <div className="row" style={{marginBottom:8}}>
-        <button className="btn btn-primary" onClick={start}
-          disabled={!mounted || listening || recognizing}>
-          ▶ Start
-        </button>
-        <button className="btn" onClick={stop} disabled={!listening}>■ Stop</button>
-        <button className="btn" onClick={clearAll}>Clear</button>
-        <button className="btn" onClick={getFeedback} disabled={transcript.trim().length<5}>
-          💡 Get Feedback
-        </button>
-      </div>
-
-      {error && <p style={{color:"var(--red)"}}>{error}</p>}
-
-      <textarea rows={6} className="input"
-        placeholder="Speak or type here…"
-        value={transcript}
-        onChange={e=>setTranscript(e.target.value)}
-      />
-      <h4>Feedback</h4>
-      <pre style={{whiteSpace:"pre-wrap"}}>{feedback}</pre>
     </div>
   );
 }
