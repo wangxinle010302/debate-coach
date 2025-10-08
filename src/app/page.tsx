@@ -1,93 +1,101 @@
 "use client";
-import Image from "next/image";
+
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { SCENES, DEFAULT_SCENE, type SceneKey } from "@/lib/scenes";
+import ScenePicker from "@/components/ScenePicker";
+import { SceneKey } from "@/lib/scenes";
 
-export default function Home() {
-  const r = useRouter();
+export default function HomePage() {
+  const router = useRouter();
   const [topic, setTopic] = useState("Should platforms filter harmful language in conversations?");
-  const [langA, setLangA] = useState("zh");
-  const [langB, setLangB] = useState("en");
-  const [scene, setScene] = useState<SceneKey>(DEFAULT_SCENE);
+  const [langA, setLangA] = useState("中文");
+  const [langB, setLangB] = useState("English");
+  const [scene, setScene] = useState<SceneKey | null>(null);
+
+  const start = () => {
+    const params = new URLSearchParams({
+      topic,
+      langA,
+      langB,
+      theme: scene ?? "server_hall_neon",
+    });
+    router.push(`/debate?${params.toString()}`);
+  };
+
+  const disableStart = !topic || !langA || !langB;
 
   return (
-    <main className="min-h-dvh relative">
-      {/* 背景图（随场景变化） */}
-      <div className="absolute inset-0 -z-10">
-        <Image
-          src={SCENES[scene].img}
-          alt=""
-          fill
-          priority
-          className="object-cover opacity-[.85]"
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-[#0a0f1fb3] to-[#0a0f1f] mix-blend-multiply"/>
-      </div>
+    <main className="min-h-dvh relative text-white">
+      {/* 背景可放默认图 */}
+      <div className="absolute inset-0 -z-10 bg-gradient-to-b from-slate-900 to-slate-950" />
 
-      <div className="container">
-        <h1 className="neon-title mt-10 mb-6">Speak. Rewrite. Compare.</h1>
-        <p className="text-[15px] md:text-[16px] text-[var(--muted)] max-w-2xl mb-8">
-          A two-speaker, multi-language debate sandbox with polite rewriting and beautiful themed backdrops.
+      <div className="mx-auto max-w-5xl px-4 py-12">
+        <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight">
+          <span className="bg-clip-text text-transparent bg-gradient-to-r from-sky-300 via-fuchsia-300 to-pink-300">
+            Speak. Rewrite. Compare.
+          </span>
+        </h1>
+        <p className="mt-3 text-white/70">
+          A two-speaker, multi-language debate sandbox with polite rewriting and themed backdrops.
         </p>
 
-        {/* 表单卡片 */}
-        <div className="glass p-5 md:p-6 max-w-3xl">
-          <label className="text-sm block mb-2 opacity-90">Debate Topic</label>
-          <input className="input mb-4" value={topic} onChange={e=>setTopic(e.target.value)} />
+        {/* 表单 */}
+        <div className="mt-8 rounded-2xl bg-white/5 backdrop-blur border border-white/10 p-4 md:p-6">
+          <label className="block text-sm text-white/70 mb-2">Debate Topic</label>
+          <input
+            value={topic}
+            onChange={(e) => setTopic(e.target.value)}
+            className="w-full rounded-lg bg-white/10 border border-white/15 px-3 py-2 outline-none focus:ring-2 focus:ring-fuchsia-400"
+            placeholder="Type your debate topic..."
+          />
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <label className="text-sm block mb-2 opacity-90">Speaker A</label>
-              <select className="input" value={langA} onChange={e=>setLangA(e.target.value)}>
-                <option value="zh">中文</option>
-                <option value="en">English</option>
-                <option value="es">Español</option>
-                <option value="ja">日本語</option>
-                <option value="ko">한국어</option>
+              <label className="block text-sm text-white/70 mb-1">Speaker A</label>
+              <select
+                value={langA}
+                onChange={(e) => setLangA(e.target.value)}
+                className="w-full rounded-lg bg-white/10 border border-white/15 px-3 py-2 outline-none"
+              >
+                <option>中文</option>
+                <option>English</option>
+                <option>Español</option>
+                <option>日本語</option>
               </select>
             </div>
             <div>
-              <label className="text-sm block mb-2 opacity-90">Speaker B</label>
-              <select className="input" value={langB} onChange={e=>setLangB(e.target.value)}>
-                <option value="en">English</option>
-                <option value="zh">中文</option>
-                <option value="es">Español</option>
-                <option value="ja">日本語</option>
-                <option value="ko">한국어</option>
+              <label className="block text-sm text-white/70 mb-1">Speaker B</label>
+              <select
+                value={langB}
+                onChange={(e) => setLangB(e.target.value)}
+                className="w-full rounded-lg bg-white/10 border border-white/15 px-3 py-2 outline-none"
+              >
+                <option>English</option>
+                <option>中文</option>
+                <option>Español</option>
+                <option>日本語</option>
               </select>
             </div>
           </div>
 
-          <div className="mt-5 flex items-center gap-3">
+          <div className="mt-4 flex items-center gap-3">
             <button
-              className="neon-btn"
-              onClick={() =>
-                r.push(`/debate?theme=${scene}&topic=${encodeURIComponent(topic)}&langA=${langA}&langB=${langB}`)
-              }
+              onClick={start}
+              disabled={disableStart}
+              className={`rounded-full px-5 py-2.5 text-sm font-semibold transition
+                ${disableStart
+                  ? "bg-white/10 text-white/50 cursor-not-allowed"
+                  : "bg-gradient-to-r from-sky-400 to-fuchsia-500 hover:brightness-110 shadow-lg"
+                }`}
             >
               Start Debate
             </button>
           </div>
         </div>
 
-        {/* 场景滑条 */}
-        <div className="glass mt-6">
-          <div className="scene-rail">
-            {Object.entries(SCENES).map(([key, info]) => (
-              <button key={key}
-                onClick={()=>setScene(key as SceneKey)}
-                className={`relative scene-thumb ${scene===key ? "ring-2 ring-cyan-300/70" : ""}`}
-                title={info.label}
-              >
-                <Image src={info.img} alt={info.label} fill className="object-cover"/>
-                <div className="absolute inset-0 bg-black/35"></div>
-                <div className="absolute bottom-1.5 left-2 right-2 text-[13px] font-semibold text-white/95">
-                  {info.label}
-                </div>
-              </button>
-            ))}
-          </div>
+        {/* 两排×5张横图 */}
+        <div className="mt-6">
+          <ScenePicker value={scene} onChange={setScene} />
         </div>
       </div>
     </main>
