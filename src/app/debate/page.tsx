@@ -1,21 +1,30 @@
-"use client";
-
-import { useSearchParams } from "next/navigation";
+// src/app/debate/page.tsx  —— Server Component 版本
 import Image from "next/image";
 import { SCENES } from "@/lib/scenes";
 
-export default function DebatePage() {
-  const params = useSearchParams();
-  const theme = params.get("theme") as keyof typeof SCENES | null;
-  const topic = params.get("topic") ?? "";
-  const langA = params.get("langA") ?? "中文";
-  const langB = params.get("langB") ?? "English";
+export const dynamic = "force-dynamic"; // 避免 Vercel 预渲染卡住
 
-  const scene = theme && SCENES[theme] ? SCENES[theme] : null;
+type SceneKey = keyof typeof SCENES;
+
+type PageProps = {
+  searchParams?: {
+    theme?: SceneKey;
+    topic?: string;
+    langA?: string;
+    langB?: string;
+  };
+};
+
+export default function DebatePage({ searchParams }: PageProps) {
+  const theme = (searchParams?.theme as SceneKey) ?? "server_hall_neon";
+  const scene = SCENES[theme] ?? null;
+
+  const topic = searchParams?.topic ?? "";
+  const langA = searchParams?.langA ?? "中文";
+  const langB = searchParams?.langB ?? "English";
 
   return (
     <div className="min-h-dvh relative text-white">
-      {/* 背景图 */}
       {scene ? (
         <Image
           src={scene.img}
@@ -28,15 +37,13 @@ export default function DebatePage() {
         <div className="absolute inset-0 -z-10 bg-gradient-to-b from-slate-900 to-slate-950" />
       )}
 
-      {/* 这里放你的双栏辩论 UI（已存在的话保留即可） */}
       <div className="mx-auto max-w-6xl px-4 py-6">
-        <h2 className="text-xl md:text-2xl font-semibold opacity-90">
-          {topic}
-        </h2>
+        <h2 className="text-xl md:text-2xl font-semibold opacity-90">{topic}</h2>
         <p className="text-sm text-white/70 mt-1">
           A: {langA} · B: {langB}
         </p>
-        {/* ... 你的输入框、消息气泡、Send A/B 按钮等 ... */}
+
+        {/* 这里放你的对话左右栏 UI（保持你已有实现即可） */}
       </div>
     </div>
   );
