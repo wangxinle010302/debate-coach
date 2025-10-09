@@ -140,3 +140,38 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
 .rw-tabs{ display:flex; gap:6px; }
 .rw-tab{ padding:8px 12px; border-radius:999px; border:1px solid rgba(255,255,255,.1); background:#0e1320; color:#cfd5e6; }
 .rw-tab.on{ background:#1a2335; border-color:#6b78ff; color:#fff; }
+
+/* 迷你按钮 */
+.btn-mini {
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 999px;
+  padding: 8px 12px;
+  color: #e8ecf1;
+  cursor: pointer;
+}
+.btn-mini.active {
+  background: linear-gradient(90deg,#7c8cff,#b36bff);
+  color: #0a0f18;
+  border: 0;
+}
+.btn {
+  padding: 12px 18px;
+  border-radius: 999px;
+  border: 0;
+  background: linear-gradient(90deg,#7c8cff,#b36bff);
+  color: #0a0f18; font-weight: 800;
+  cursor: pointer; height: 44px;
+}
+
+/* 背景 + 毛玻璃（你已有的话可忽略） */
+.scene{position:fixed;inset:0;background-size:cover;background-position:center;}
+.scene-overlay{position:absolute;inset:0;background:radial-gradient(1200px 600px at 50% -10%,rgba(124,140,255,.35),transparent),rgba(6,8,12,.45);}
+.debate-wrap{position:relative;min-height:100vh;padding:18px;}
+.panel{background:rgba(20,24,33,.48); border:1px solid rgba(255,255,255,.08); border-radius:16px; backdrop-filter:saturate(130%) blur(12px);}
+.topbar{display:flex;align-items:center;justify-content:space-between;margin:8px auto 14px;max-width:920px;color:#cdd6f7}
+.link{background:none;border:0;color:#cdd6f7;cursor:pointer}
+.badge{padding:6px 10px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.08);}
+
+.chat-scroll::-webkit-scrollbar{height:8px;width:8px}
+.chat-scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:8px}
