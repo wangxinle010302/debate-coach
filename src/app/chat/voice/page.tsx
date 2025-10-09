@@ -1,14 +1,24 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Bubble, type Role } from '@/components/Bubble';
 import { voiceToScore, type VoiceMetrics } from '@/lib/score';
+import { TOPICS, type TopicKey } from '@/lib/topics';
+import { t, type Lang } from '@/lib/i18n';
 
 type Msg = { id: string; role: Role; content: string };
 
 export default function VoiceChatPage() {
+  const router = useRouter();
+  const sp = useSearchParams();
+  const topic = (sp.get('topic') ?? 'server-hall-neon') as TopicKey;
+  const lang = (sp.get('lang') ?? (localStorage.getItem('lang')||'en')) as Lang;
+  const i18n = useMemo(()=>t(lang), [lang]);
+  const bg = TOPICS[topic]?.img ?? TOPICS['server-hall-neon'].img;
+
   const [messages, setMessages] = useState<Msg[]>([
-    { id: crypto.randomUUID(), role: 'assistant', content: '欢迎使用语音模式。点击 🎤 说话，结束后会显示语音评分；你可编辑文本再发送给我。' }
+    { id: crypto.randomUUID(), role: 'assistant', content: i18n.voiceHint }
   ]);
   const [recording, setRecording] = useState(false);
   const [partial, setPartial] = useState('');
@@ -23,9 +33,7 @@ export default function VoiceChatPage() {
     if(!text.trim()) return;
     const mine: Msg = { id: crypto.randomUUID(), role: 'user', content: text.trim() };
     setMessages(prev => [...prev, mine]);
-    setInput('');
-    setPartial('');
-    setLoading(true);
+    setInput(''); setPartial(''); setLoading(true);
     try{
       const res = await fetch('/api/chat', {
         method:'POST',
@@ -39,77 +47,93 @@ export default function VoiceChatPage() {
       const data = await res.json();
       const ai: Msg = { id: crypto.randomUUID(), role:'assistant', content: data.reply ?? '(no reply)' };
       setMessages(prev => [...prev, ai]);
-    }finally{
-      setLoading(false);
-    }
+    }finally{ setLoading(false); }
+  }
+
+  function toggleLang() {
+    const next = lang === 'en' ? 'zh' : 'en';
+    const qs = new URLSearchParams(Array.from(sp.entries()));
+    qs.set('lang', next);
+    router.replace(`/chat/voice?${qs.toString()}`);
   }
 
   return (
-    <div className="chat-wrap">
-      <div className="chat-top">
-        <a className="link" href="/">← Back</a>
-        <div className="title">Voice Chat · 单用户</div>
-        <div/>
+    <>
+      <div className="scene" style={{ backgroundImage:`url(${bg})` }}>
+        <div className="scene-overlay" />
       </div>
 
-      <div className="chat-panel glass" ref={listRef}>
-        {messages.map(m => <Bubble key={m.id} role={m.role} text={m.content}/>)}
-        {recording && partial && <Bubble role="user" text={partial + ' …'}/>}
-      </div>
-
-      <VoiceBar
-        recording={recording}
-        onToggle={setRecording}
-        onTranscript={({ partialText, finalText })=>{
-          if(partialText) setPartial(partialText);
-          if(finalText) setInput(prev=> (prev? prev+' ' : '') + finalText);
-        }}
-        onMetrics={setMetrics}
-      />
-
-      {metrics && (
-        <div className="glass score-card">
-          <div className="score-grid">
-            <Score label="速度" v={metrics.wpm}/>
-            <Score label="响度" v={Math.round(metrics.avgRms*100)}/>
-            <Score label="停顿" v={100 - Math.min(100, metrics.pauseCount*15)}/>
-            <Score label="总评" v={voiceToScore(metrics).total}/>
-          </div>
-          <ul className="tips">
-            {voiceToScore(metrics).tips.map((t,i)=><li key={i}>• {t}</li>)}
-          </ul>
+      <div className="chat-wrap">
+        <div className="chat-top">
+          <a className="link" href={`/?lang=${lang}`}>&larr; {i18n.back}</a>
+          <div className="title">{i18n.voiceTitle}</div>
+          <button className="btn" onClick={toggleLang}>{lang==='en'?'中文界面':'English UI'}</button>
         </div>
-      )}
 
-      <div className="toolbar glass">
-        <textarea
-          className="input"
-          placeholder="语音会自动转写到这里，你也可以手动修改再发送"
-          value={input}
-          onChange={e=>setInput(e.target.value)}
-          onKeyDown={e=>{
-            if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendText(input); }
+        <div className="chat-panel glass" ref={listRef}>
+          {messages.map(m => <Bubble key={m.id} role={m.role} text={m.content}/>)}
+          {recording && partial && <Bubble role="user" text={partial + ' …'}/>}
+        </div>
+
+        <VoiceBar
+          recording={recording}
+          onToggle={setRecording}
+          onTranscript={({ partialText, finalText })=>{
+            if(partialText) setPartial(partialText);
+            if(finalText) setInput(prev=> (prev? prev+' ' : '') + finalText);
           }}
+          onMetrics={setMetrics}
+          lang={lang}
         />
-        <div className="tools">
-          <button className="btn" disabled={loading || !input.trim()} onClick={()=>sendText(input)}>
-            {loading?'Sending…':'Send'}
-          </button>
+
+        {metrics && (
+          <div className="glass score-card">
+            <div className="score-grid">
+              <S label={lang==='en'?'Speed (WPM)':'速度 WPM'} v={metrics.wpm}/>
+              <S label={lang==='en'?'Loudness':'响度'} v={Math.round(metrics.avgRms*100)}/>
+              <S label={lang==='en'?'Pauses':'停顿'} v={100 - Math.min(100, metrics.pauseCount*15)}/>
+              <S label={lang==='en'?'Total':'总评'} v={voiceToScore(metrics).total}/>
+            </div>
+            <ul className="tips">
+              {voiceToScore(metrics).tips.map((tt,i)=><li key={i}>• {tt}</li>)}
+            </ul>
+          </div>
+        )}
+
+        <div className="toolbar glass">
+          <textarea
+            className="input"
+            placeholder={lang==='en'?'Voice gets transcribed here; you can edit before sending':'语音会转写到这里，你可编辑后发送'}
+            value={input}
+            onChange={e=>setInput(e.target.value)}
+            onKeyDown={e=>{
+              if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendText(input); }
+            }}
+          />
+          <div className="tools">
+            <button className="btn" disabled={loading || !input.trim()} onClick={()=>sendText(input)}>
+              {loading ? (lang==='en'?'Sending…':'发送中…') : i18n.send}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
-/* ===== 录音+转写+声学分析条（浏览器端） ===== */
+function S({label, v}:{label:string; v:number}) {
+  return <div className="score"><div className="score-v">{Math.round(v)}</div><div className="score-l">{label}</div></div>;
+}
+
+/* === 录音条：浏览器转写 + 声学指标 === */
 function VoiceBar({
-  recording, onToggle,
-  onTranscript, onMetrics,
+  recording, onToggle, onTranscript, onMetrics, lang
 }:{
   recording:boolean;
   onToggle:(v:boolean)=>void;
   onTranscript:(p:{partialText?:string; finalText?:string})=>void;
   onMetrics:(m:VoiceMetrics)=>void;
+  lang:Lang;
 }){
   const recRef = useRef<any>(null);
   const acRef = useRef<AudioContext|null>(null);
@@ -133,9 +157,8 @@ function VoiceBar({
 
     const now = performance.now();
     const silent = rms < 0.02;
-    if(silent){
-      if(lastBelowRef.current==null) lastBelowRef.current = now;
-    }else{
+    if(silent){ if(lastBelowRef.current==null) lastBelowRef.current = now; }
+    else{
       if(lastBelowRef.current!=null){
         const d = now - lastBelowRef.current;
         if(d>250){ pauseCountRef.current += 1; longestPauseRef.current = Math.max(longestPauseRef.current, d); }
@@ -159,7 +182,7 @@ function VoiceBar({
 
     const SR:any = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
     if(SR){
-      const r = new SR(); r.lang='zh-CN'; r.interimResults=true; r.continuous=true;
+      const r = new SR(); r.lang = lang==='en' ? 'en-US' : 'zh-CN'; r.interimResults=true; r.continuous=true;
       r.onresult=(e:any)=>{
         let fin='', tmp='';
         for(let i=e.resultIndex;i<e.results.length;i++){
@@ -194,14 +217,10 @@ function VoiceBar({
 
   return (
     <div className="glass toolbar" style={{justifyContent:'space-between',alignItems:'center'}}>
-      <div>语音输入</div>
+      <div>{lang==='en'?'Voice Input':'语音输入'}</div>
       <button className={`mic ${recording?'on':''}`} onClick={()=> recording?stop():start()}>
-        {recording?'● Stop':'🎤 Speak'}
+        {recording? (lang==='en'?'● Stop':'● 停止') : '🎤 Speak'}
       </button>
     </div>
   );
-}
-
-function Score({label, v}:{label:string; v:number}) {
-  return <div className="score"><div className="score-v">{Math.round(v)}</div><div className="score-l">{label}</div></div>;
 }

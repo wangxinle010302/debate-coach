@@ -1,18 +1,27 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Bubble, type Role } from '@/components/Bubble';
 import { scoreText, type TextScore } from '@/lib/score';
+import { TOPICS, type TopicKey } from '@/lib/topics';
+import { t, type Lang } from '@/lib/i18n';
 
 type Msg = { id: string; role: Role; content: string };
 
 export default function TextChatPage() {
+  const router = useRouter();
+  const sp = useSearchParams();
+  const topic = (sp.get('topic') ?? 'server-hall-neon') as TopicKey;
+  const lang = (sp.get('lang') ?? (localStorage.getItem('lang')||'en')) as Lang;
+  const i18n = useMemo(()=>t(lang), [lang]);
+  const bg = TOPICS[topic]?.img ?? TOPICS['server-hall-neon'].img;
+
   const [messages, setMessages] = useState<Msg[]>([
-    { id: crypto.randomUUID(), role: 'assistant', content: '欢迎使用文本模式。先输入内容，点「评分 & 改写」，选好改写强度后再发给我～' }
+    { id: crypto.randomUUID(), role: 'assistant', content: i18n.textHint }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-
   const [pendingScore, setPendingScore] = useState<TextScore | null>(null);
   const [rewriteStrength, setRewriteStrength] = useState<'light'|'medium'|'heavy'>('medium');
 
@@ -52,78 +61,88 @@ export default function TextChatPage() {
       const data = await res.json();
       const ai: Msg = { id: crypto.randomUUID(), role: 'assistant', content: data.reply ?? '(no reply)' };
       setMessages(prev => [...prev, ai]);
-    } catch {
-      setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'assistant', content: '⚠️ 改写或对话失败，请重试。' }]);
     } finally {
       setLoading(false);
     }
   }
 
+  function toggleLang() {
+    const next = lang === 'en' ? 'zh' : 'en';
+    const qs = new URLSearchParams(Array.from(sp.entries()));
+    qs.set('lang', next);
+    router.replace(`/chat/text?${qs.toString()}`);
+  }
+
   return (
-    <div className="chat-wrap">
-      <div className="chat-top">
-        <a className="link" href="/">← Back</a>
-        <div className="title">Text Chat · 单用户</div>
-        <div/>
+    <>
+      <div className="scene" style={{ backgroundImage:`url(${bg})` }}>
+        <div className="scene-overlay" />
       </div>
 
-      <div className="chat-panel glass" ref={listRef}>
-        {messages.map(m => <Bubble key={m.id} role={m.role} text={m.content} />)}
-      </div>
+      <div className="chat-wrap">
+        <div className="chat-top">
+          <a className="link" href={`/?lang=${lang}`}>&larr; {i18n.back}</a>
+          <div className="title">{i18n.textTitle}</div>
+          <button className="btn" onClick={toggleLang}>{lang==='en'?'中文界面':'English UI'}</button>
+        </div>
 
-      {pendingScore && (
-        <div className="glass score-card">
-          <div className="score-grid">
-            <ScoreItem label="清晰" v={pendingScore.clarity}/>
-            <ScoreItem label="礼貌" v={pendingScore.civility}/>
-            <ScoreItem label="逻辑" v={pendingScore.logic}/>
-            <ScoreItem label="证据" v={pendingScore.evidence}/>
-            <ScoreItem label="简洁" v={pendingScore.brevity}/>
-            <ScoreItem label="整体" v={pendingScore.total}/>
-          </div>
-          <ul className="tips">
-            {pendingScore.tips.map((t,i)=><li key={i}>• {t}</li>)}
-          </ul>
+        <div className="chat-panel glass" ref={listRef}>
+          {messages.map(m => <Bubble key={m.id} role={m.role} text={m.content} />)}
+        </div>
 
-          <div className="rw">
-            <label>改写强度：</label>
-            <div className="rw-tabs">
-              {(['light','medium','heavy'] as const).map(k=>(
-                <button key={k} className={`rw-tab ${rewriteStrength===k?'on':''}`} onClick={()=>setRewriteStrength(k)}>
-                  {k==='light'?'轻微':k==='medium'?'中等':'重写'}
-                </button>
-              ))}
+        {pendingScore && (
+          <div className="glass score-card">
+            <div className="score-grid">
+              <S label={lang==='en'?'Clarity':'清晰'} v={pendingScore.clarity}/>
+              <S label={lang==='en'?'Civility':'礼貌'} v={pendingScore.civility}/>
+              <S label={lang==='en'?'Logic':'逻辑'} v={pendingScore.logic}/>
+              <S label={lang==='en'?'Evidence':'证据'} v={pendingScore.evidence}/>
+              <S label={lang==='en'?'Brevity':'简洁'} v={pendingScore.brevity}/>
+              <S label={lang==='en'?'Total':'整体'} v={pendingScore.total}/>
             </div>
-            <button className="btn" onClick={applyRewriteAndSend} disabled={loading}>
-              {loading ? 'Sending…' : '应用改写并发送'}
-            </button>
+            <ul className="tips">
+              {pendingScore.tips.map((tt,i)=><li key={i}>• {tt}</li>)}
+            </ul>
+
+            <div className="rw">
+              <label>{lang==='en'?'Rewrite strength:':'改写强度：'}</label>
+              <div className="rw-tabs">
+                <button className={`rw-tab ${rewriteStrength==='light'?'on':''}`} onClick={()=>setRewriteStrength('light')}>
+                  {i18n.rewriteLight}
+                </button>
+                <button className={`rw-tab ${rewriteStrength==='medium'?'on':''}`} onClick={()=>setRewriteStrength('medium')}>
+                  {i18n.rewriteMed}
+                </button>
+                <button className={`rw-tab ${rewriteStrength==='heavy'?'on':''}`} onClick={()=>setRewriteStrength('heavy')}>
+                  {i18n.rewriteHeavy}
+                </button>
+              </div>
+              <button className="btn" onClick={applyRewriteAndSend}>
+                {i18n.applyAndSend}
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="toolbar glass">
+          <textarea
+            className="input"
+            placeholder={lang==='en'?'Type here, then click “Score & Rewrite”':'输入文本后点击“评分与改写”'}
+            value={input}
+            onChange={e=>setInput(e.target.value)}
+            onKeyDown={e=>{
+              if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); handleScore(); }
+            }}
+          />
+          <div className="tools">
+            <button className="btn" onClick={handleScore} disabled={!input.trim()}>{i18n.scoreRewrite}</button>
           </div>
         </div>
-      )}
-
-      <div className="toolbar glass">
-        <textarea
-          className="input"
-          placeholder="输入你的发言，然后点「评分 & 改写」"
-          value={input}
-          onChange={e=>setInput(e.target.value)}
-          onKeyDown={e=>{
-            if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); handleScore(); }
-          }}
-        />
-        <div className="tools">
-          <button className="btn" onClick={handleScore} disabled={!input.trim()}>评分 & 改写</button>
-        </div>
       </div>
-    </div>
+    </>
   );
 }
 
-function ScoreItem({label, v}:{label:string; v:number}) {
-  return (
-    <div className="score">
-      <div className="score-v">{Math.round(v)}</div>
-      <div className="score-l">{label}</div>
-    </div>
-  );
+function S({label, v}:{label:string; v:number}) {
+  return <div className="score"><div className="score-v">{Math.round(v)}</div><div className="score-l">{label}</div></div>;
 }
