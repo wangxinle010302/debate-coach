@@ -1,106 +1,85 @@
-'use client';
+"use client";
 
-import Image from 'next/image';
-import { useMemo, useState } from 'react';
+import Image from "next/image";
+import { useRouter } from "next/navigation";
 
-type Scene = { id: string; name: string; file: string };
+type Topic = {
+  slug: string;
+  title: string;
+  subtitle: string;
+  img: string; // filename in /public/topics
+};
 
-const SCENES: Scene[] = [
-  { id: 'bio_ethics_lab',       name: 'Bio Ethics Lab',        file: 'bio-ethics-lab.png' },
-  { id: 'server_hall_neon',     name: 'Server Hall (Neon)',    file: 'server-hall-neon.png' },
-  { id: 'neon_forest',          name: 'Neon Forest',           file: 'neon-forest.png' },
-  { id: 'ocean_climate',        name: 'Ocean & Climate',       file: 'ocean-climate.png' },
-  { id: 'data_privacy_city',    name: 'Data Privacy City',     file: 'data-privacy-city.png' },
-  { id: 'ai_classroom',         name: 'AI Classroom',          file: 'ai-classroom.png' },
-  { id: 'free_speech_agora',    name: 'Free Speech Agora',     file: 'free-speech-agora.png' },
-  { id: 'tech_factory',         name: 'Tech & Labor Factory',  file: 'tech-factory.png' },
-  { id: 'healthcare_ai_clinic', name: 'Healthcare AI Clinic',  file: 'healthcare-ai-clinic.png' },
-  { id: 'urban_mobility',       name: 'Urban Mobility',        file: 'urban-mobility.png' },
+const TOPICS: Topic[] = [
+  {
+    slug: "data-privacy-city",
+    title: "Data Privacy City",
+    subtitle: "Who owns your data?",
+    img: "data-privacy-city.png",
+  },
+  {
+    slug: "ai-classroom",
+    title: "AI Classroom",
+    subtitle: "Should AI teach critical thinking?",
+    img: "ai-classroom.png",
+  },
+  {
+    slug: "free-speech-agora",
+    title: "Free Speech Agora",
+    subtitle: "Where do we draw the line?",
+    img: "free-speech-agora.png",
+  },
+  {
+    slug: "healthcare-ai-clinic",
+    title: "Healthcare AI Clinic",
+    subtitle: "Trusting AI with care decisions?",
+    img: "healthcare-ai-clinic.png",
+  },
 ];
 
 export default function Home() {
-  const [theme, setTheme] = useState<string>('server_hall_neon');
-  const [topic, setTopic] = useState<string>(
-    'Should platforms filter harmful language in conversations?'
-  );
-  const [langA, setLangA] = useState<string>('zh');
-  const [langB, setLangB] = useState<string>('en');
+  const router = useRouter();
 
-  const bg = useMemo(() => {
-    const hit = SCENES.find((s) => s.id === theme) ?? SCENES[0];
-    return `/scenes/${hit.file}`;
-  }, [theme]);
-
-  const toQS = () =>
-    new URLSearchParams({ theme, topic, langA, langB }).toString();
-
-  const goSingle = () => (location.href = `/chat/text?${toQS()}`);
-  const goDual   = () => (location.href = `/debate?${toQS()}`);
+  function goto(slug: string, mode: "chat" | "voice") {
+    // 记住选择，用于子页面背景
+    if (typeof window !== "undefined") {
+      localStorage.setItem("selectedTopic", slug);
+    }
+    router.push(`/${mode}?topic=${slug}`);
+  }
 
   return (
-    <main className="home">
-      <div className="scene" style={{ backgroundImage: `url(${bg})` }} />
-      <div className="scene-overlay" />
+    <main className="container">
+      <header className="hero">
+        <h1>
+          <span className="grad">Debate Coach</span>
+        </h1>
+        <p className="muted">Pick a topic · Choose a mode · Get instant critique</p>
+      </header>
 
-      <div className="container">
-        <div className="hero" style={{ marginTop: 24 }}>
-          <h1 className="grad">Speak. Rewrite. Compare.</h1>
-          <p className="muted">
-            A two-speaker, multi-language debate sandbox with polite rewriting and beautiful themed backdrops.
-          </p>
-        </div>
-
-        <div className="panel glass">
-          <label>Debate Topic</label>
-          <input
-            value={topic}
-            onChange={(e) => setTopic(e.target.value)}
-            placeholder="Type your topic…"
-          />
-
-          <div className="row">
-            <div className="col">
-              <label>Speaker A</label>
-              <select value={langA} onChange={(e) => setLangA(e.target.value)}>
-                <option value="zh">中文</option>
-                <option value="en">English</option>
-              </select>
-            </div>
-            <div className="col">
-              <label>Speaker B</label>
-              <select value={langB} onChange={(e) => setLangB(e.target.value)}>
-                <option value="en">English</option>
-                <option value="zh">中文</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="row" style={{ gap: 10 }}>
-            <button className="btn" onClick={goSingle}>Practice (Single)</button>
-            <button className="btn" onClick={goDual}>Start Debate (Dual)</button>
-          </div>
-        </div>
-
-        {/* 主题网格：两排五个 */}
-        <div className="grid">
-          {SCENES.map((s) => (
-            <button
-              key={s.id}
-              className={`tile ${theme === s.id ? 'active' : ''}`}
-              onClick={() => setTheme(s.id)}
-              aria-label={s.name}
-            >
+      <section className="grid">
+        {TOPICS.map((t) => (
+          <article key={t.slug} className="tile" aria-label={t.title}>
+            <div className="thumb">
+              {/* 用 next/image 提升加载体验；确保 public/topics/ 下有对应 png */}
               <Image
-                src={`/scenes/${s.file}`}
-                alt={s.name}
-                width={640}
-                height={360}
+                src={`/topics/${t.img}`}
+                alt={t.title}
+                width={800}
+                height={480}
+                priority
               />
-              <span>{s.name}</span>
-            </button>
-          ))}
-        </div>
-      </div>
+            </div>
+            <div className="tile-title">{t.title}</div>
+            <div className="tile-sub">{t.subtitle}</div>
+
+            <div className="actions">
+              <button onClick={() => goto(t.slug, "chat")}>Text</button>
+              <button onClick={() => goto(t.slug, "voice")}>Voice</button>
+            </div>
+          </article>
+        ))}
+      </section>
     </main>
   );
 }

@@ -95,3 +95,44 @@ body{
 .tile img{width:100%;height:120px;object-fit:cover;border-radius:12px}
 .tile span{font-size:12px;color:#d8deea;text-align:left}
 .tile.active{box-shadow:0 0 0 2px #8a7bff88,0 0 0 1px #8a7bff inset}
+
+/* —— 首页网格（两列/四列自适应） —— */
+.grid{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:16px;
+  margin:18px 0 48px;
+}
+@media (max-width: 1100px){ .grid{ grid-template-columns:repeat(2,1fr);} }
+@media (max-width: 620px){ .grid{ grid-template-columns:1fr; } }
+
+.tile{
+  position:relative;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  background:#0d1220;
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:16px;
+  overflow:hidden;
+  padding:10px;
+}
+.tile .thumb{ position:relative; border-radius:12px; overflow:hidden; }
+.tile img{ width:100%; height:auto; display:block; transform:scale(1.0); transition:transform .25s ease;}
+.tile:hover img{ transform:scale(1.03); }
+
+.tile-title{ font-weight:700; color:#e7ecff; }
+.tile-sub{ font-size:12px; color:#a9b0bd; }
+
+.actions{
+  position:absolute; left:10px; right:10px; bottom:10px;
+  display:flex; gap:8px;
+}
+.actions button{
+  flex:1;
+  height:36px; border:0; cursor:pointer;
+  border-radius:999px;
+  font-weight:700;
+  color:#0a0f18;
+  background:linear-gradient(90deg,#7c8cff,#b36bff);
+}
