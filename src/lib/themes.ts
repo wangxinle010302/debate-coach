@@ -1,31 +1,28 @@
-// src/lib/themes.ts
-export type ThemeId =
-  | "bio_ethics_lab"
-  | "server_hall_neon"
-  | "neon_forest"
-  | "ocean_climate"
-  | "data_privacy_city"
-  | "ai_classroom"
-  | "free_speech_agora"
-  | "tech_labor_factory"
-  | "healthcare_ai_clinic"
-  | "urban_mobility";
+export type ThemeKey =
+  | "bio-ethics-lab"
+  | "server-hall-neon"
+  | "neon-forest"
+  | "ocean-climate"
+  | "data-privacy-city"
+  | "ai-classroom"
+  | "free-speech-agora"
+  | "tech-labor-factory"
+  | "healthcare-ai-clinic"
+  | "urban-mobility";
 
-export const THEMES: Record<ThemeId, { label: string; file: string }> = {
-  bio_ethics_lab:       { label: "Bio Ethics Lab",        file: "bio-ethics-lab.png" },
-  server_hall_neon:     { label: "Server Hall (Neon)",    file: "server-hall-neon.png" },
-  neon_forest:          { label: "Neon Forest",           file: "neon-forest.png" },
-  ocean_climate:        { label: "Ocean & Climate",       file: "ocean-climate.png" },
-  data_privacy_city:    { label: "Data Privacy City",     file: "data-privacy-city.png" },
-  ai_classroom:         { label: "AI Classroom",          file: "ai-classroom.png" },
-  free_speech_agora:    { label: "Free Speech Agora",     file: "free-speech-agora.png" },
-  tech_labor_factory:   { label: "Tech & Labor Factory",  file: "tech-labor-factory.png" },
-  healthcare_ai_clinic: { label: "Healthcare AI Clinic",  file: "healthcare-ai-clinic.png" },
-  urban_mobility:       { label: "Urban Mobility",        file: "urban-mobility.png" },
-};
+export type ThemeItem = { key: ThemeKey; name: string; src: string };
 
-export const DEFAULT_THEME: ThemeId = "server_hall_neon";
-export const THEME_ORDER: ThemeId[] = [
-  "bio_ethics_lab","server_hall_neon","neon_forest","ocean_climate","data_privacy_city",
-  "ai_classroom","free_speech_agora","tech_labor_factory","healthcare_ai_clinic","urban_mobility",
+export const THEMES: ThemeItem[] = [
+  { key: "bio-ethics-lab",        name: "Bio Ethics Lab",         src: "/scenes/bio-ethics-lab.png" },
+  { key: "server-hall-neon",      name: "Server Hall (Neon)",     src: "/scenes/server-hall-neon.png" },
+  { key: "neon-forest",           name: "Neon Forest",            src: "/scenes/neon-forest.png" },
+  { key: "ocean-climate",         name: "Ocean & Climate",        src: "/scenes/ocean-climate.png" },
+  { key: "data-privacy-city",     name: "Data Privacy City",      src: "/scenes/data-privacy-city.png" },
+  { key: "ai-classroom",          name: "AI Classroom",           src: "/scenes/ai-classroom.png" },
+  { key: "free-speech-agora",     name: "Free Speech Agora",      src: "/scenes/free-speech-agora.png" },
+  { key: "tech-labor-factory",    name: "Tech & Labor Factory",   src: "/scenes/tech-labor-factory.png" },
+  { key: "healthcare-ai-clinic",  name: "Healthcare AI Clinic",   src: "/scenes/healthcare-ai-clinic.png" },
+  { key: "urban-mobility",        name: "Urban Mobility",         src: "/scenes/urban-mobility.png" },
 ];
+
+export const THEME_BY_KEY = new Map(THEMES.map(t => [t.key, t]));

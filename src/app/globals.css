@@ -1,138 +1,70 @@
-/* ========= Global styles (no Tailwind needed) ========= */
+/* ===== 全局基础，不依赖 Tailwind ===== */
+* { box-sizing: border-box; }
+:root {
+  --ink:#e8ecf1; --muted:#a9b0bd; --bg:#0b0f17;
+  --panel: rgba(20,24,33,.48); --border: rgba(255,255,255,.08);
+  --grad1:#7c8cff; --grad2:#b36bff;
+}
+html, body { margin:0; height:100%; background:var(--bg); color:var(--ink);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial; }
 
-/* Design tokens */
-:root{
-  --ink:#e8ecf1;
-  --muted:#a9b0bd;
-  --bg:#0b0f17;
-  --panel:rgba(20,24,33,.48);
-  --border:rgba(255,255,255,.08);
-  --grad1:#7c8cff;
-  --grad2:#b36bff;
+a { color:inherit; text-decoration:none; }
+
+.container { max-width: 980px; margin: 0 auto; padding: 24px; }
+.hero h1 { font-size: 40px; margin: 0 0 10px; }
+.grad { background:linear-gradient(90deg,var(--grad1),var(--grad2));
+  -webkit-background-clip:text; background-clip:text; color:transparent; }
+.muted { color:var(--muted); }
+
+.btn {
+  display:inline-flex; align-items:center; justify-content:center;
+  padding:12px 18px; border-radius:999px; border:0; cursor:pointer;
+  background:linear-gradient(90deg,var(--grad1),var(--grad2)); color:#0a0f18; font-weight:700;
+}
+.btn.ghost { background:transparent; color:#cdd6f7; border:1px solid var(--border); }
+
+.panel {
+  background:var(--panel); border:1px solid var(--border); border-radius:16px;
+  padding:16px; backdrop-filter:saturate(130%) blur(12px);
 }
 
-/* Base reset */
-*{box-sizing:border-box}
-html,body{margin:0;height:100%}
-body{
-  background:var(--bg);
-  color:var(--ink);
-  font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial;
-  -webkit-font-smoothing:antialiased;
-  -moz-osx-font-smoothing:grayscale;
+.row { display:flex; gap:12px; flex-wrap:wrap; }
+.col { flex:1; min-width: 220px; }
+
+.input, .select, .textarea {
+  width:100%; height:44px; border-radius:10px; border:1px solid var(--border);
+  background:#0e1320; color:var(--ink); padding:0 12px;
+}
+.textarea { height:110px; padding:10px 12px; }
+
+.grid { display:grid; gap:16px; }
+.fade-enter { animation:fade .4s ease both; }
+@keyframes fade { from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:none} }
+
+/* 背景场景：p5 覆盖全屏 */
+.scene { position:fixed; inset:0; }
+.scene canvas { position:absolute; inset:0; width:100% !important; height:100% !important; }
+.scene-overlay { position:absolute; inset:0;
+  background: radial-gradient(1200px 600px at 50% -10%,rgba(124,140,255,.35),transparent),rgba(6,8,12,.45);
 }
 
-/* Layout helpers */
-.container{max-width:1000px;margin:40px auto;padding:0 20px}
-.row{display:flex;gap:12px;margin-top:10px}
-.col{flex:1}
+/* 聊天气泡 */
+.bubble { padding:10px 12px; border-radius:14px; margin:8px 0; max-width: 86%; }
+.bubble.user { background: rgba(255,255,255,.08); border:1px solid var(--border); margin-left:auto; }
+.bubble.bot { background: rgba(124,140,255,.12); border:1px solid var(--border); }
 
-/* Headline */
-.hero h1{font-size:48px;margin:0 0 8px}
-.grad{
-  background:linear-gradient(90deg,var(--grad1),var(--grad2));
-  -webkit-background-clip:text;background-clip:text;color:transparent;
-}
-.muted{color:var(--muted)}
+/* 步骤导航 */
+.steps { display:flex; gap:8px; flex-wrap:wrap; }
+.step { padding:6px 10px; border-radius:999px; border:1px solid var(--border); color:#cfd6ff; opacity:.6 }
+.step.active { opacity:1; background:rgba(124,140,255,.16) }
+.small { font-size:12px; color:var(--muted); }
 
-/* Panels & inputs */
-.panel{
-  background:var(--panel);
-  border:1px solid var(--border);
-  border-radius:16px;
-  padding:16px;
-  margin:24px 0 16px;
-  backdrop-filter:saturate(130%) blur(12px);
+/* --- Relief 追加样式 --- */
+.btn-ghost{
+  display:inline-flex;align-items:center;gap:6px;
+  height:36px;padding:0 10px;border-radius:10px;
+  background:transparent;color:#cdd6f7;border:1px solid rgba(255,255,255,.12);
+  transition:.2s; cursor:pointer
 }
-.panel label{display:block;font-size:12px;color:var(--muted);margin:8px 0 6px}
-.panel input,.panel select{
-  width:100%;height:40px;border-radius:10px;border:1px solid var(--border);
-  background:#0e1320;color:var(--ink);padding:0 12px
-}
-
-/* Buttons */
-.btn{
-  margin-top:14px;padding:10px 16px;border:0;border-radius:999px;
-  background:linear-gradient(90deg,var(--grad1),var(--grad2));
-  color:#0a0f18;font-weight:700;cursor:pointer
-}
-.btn:disabled{opacity:.6;cursor:not-allowed}
-
-/* Home background + overlay */
-.home{position:relative;min-height:100vh}
-.scene{position:fixed;inset:0;background-size:cover;background-position:center}
-.scene-overlay{
-  position:fixed;inset:0;
-  background:
-    radial-gradient(1200px 600px at 50% -10%,rgba(124,140,255,.35),transparent),
-    rgba(6,8,12,.45);
-}
-
-/* “毛玻璃”通用类 */
-.glass{
-  background:var(--panel);
-  backdrop-filter:saturate(130%) blur(12px);
-  border:1px solid var(--border);
-}
-
-/* Topic cards grid: 2 rows x 5 cols (responsive) */
-.grid{
-  display:grid;
-  grid-template-columns:repeat(5,1fr);
-  gap:14px;
-  margin:12px 0 60px;
-}
-@media (max-width:1000px){ .grid{grid-template-columns:repeat(3,1fr)} }
-@media (max-width:700px){ .grid{grid-template-columns:repeat(2,1fr)} }
-
-/* Each tile */
-.tile{
-  position:relative;display:flex;flex-direction:column;gap:8px;
-  background:#0d1220;border:1px solid var(--border);
-  border-radius:16px;overflow:hidden;padding:8px;
-  cursor:pointer;outline:none
-}
-.tile img{width:100%;height:120px;object-fit:cover;border-radius:12px}
-.tile span{font-size:12px;color:#d8deea;text-align:left}
-.tile.active{box-shadow:0 0 0 2px #8a7bff88,0 0 0 1px #8a7bff inset}
-
-/* —— 首页网格（两列/四列自适应） —— */
-.grid{
-  display:grid;
-  grid-template-columns:repeat(4,1fr);
-  gap:16px;
-  margin:18px 0 48px;
-}
-@media (max-width: 1100px){ .grid{ grid-template-columns:repeat(2,1fr);} }
-@media (max-width: 620px){ .grid{ grid-template-columns:1fr; } }
-
-.tile{
-  position:relative;
-  display:flex;
-  flex-direction:column;
-  gap:8px;
-  background:#0d1220;
-  border:1px solid rgba(255,255,255,.08);
-  border-radius:16px;
-  overflow:hidden;
-  padding:10px;
-}
-.tile .thumb{ position:relative; border-radius:12px; overflow:hidden; }
-.tile img{ width:100%; height:auto; display:block; transform:scale(1.0); transition:transform .25s ease;}
-.tile:hover img{ transform:scale(1.03); }
-
-.tile-title{ font-weight:700; color:#e7ecff; }
-.tile-sub{ font-size:12px; color:#a9b0bd; }
-
-.actions{
-  position:absolute; left:10px; right:10px; bottom:10px;
-  display:flex; gap:8px;
-}
-.actions button{
-  flex:1;
-  height:36px; border:0; cursor:pointer;
-  border-radius:999px;
-  font-weight:700;
-  color:#0a0f18;
-  background:linear-gradient(90deg,#7c8cff,#b36bff);
-}
+.btn-ghost:hover{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.18)}
+.badge{padding:6px 10px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);color:#d9def9;font-size:12px}
