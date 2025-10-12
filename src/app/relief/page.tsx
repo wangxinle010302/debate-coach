@@ -1,188 +1,425 @@
+// src/app/relief/page.tsx
 'use client';
 
-import { useMemo, useState, useEffect } from 'react';
-import P5Embed from '@/components/P5Embed';
+import * as React from 'react';
+import ReadAndAnalyze from '@/components/voice/ReadAndAnalyze';
+import ChatLite from '@/components/chat/ChatLite';
 
-// === p5 sketches ===
-import flowField from '@/p5/flowField';
-import bubbles from '@/p5/bubbles';
-import stars from '@/p5/stars';
-
-// 你项目里已有的：毛玻璃容器、按钮等样式此处沿用
-const Panel = ({ title, children, tag }: {title:string; children:any; tag?:string}) => (
-  <div className="panel glass" style={{padding:18, borderRadius:16}}>
-    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-      <h3 style={{margin:0}}>{title}</h3>
-      {tag && <span className="badge">{tag}</span>}
-    </div>
-    {children}
-  </div>
-);
-
-export default function ReliefPage() {
-  // 步骤：呼吸 → 身体扫描 → 睡前书写 → 总结 → Calm Games → 结束
-  const [step, setStep] = useState(0);
-  const [rounds, setRounds] = useState(0); // 呼吸完成轮次
-  const [note, setNote] = useState('');
-  const [gameKey, setGameKey] = useState<'flow'|'bubbles'|'stars'>('flow');
-
-  const games = useMemo(() => ([
-    { key: 'flow',    label: 'Flow Field',    sketch: flowField },
-    { key: 'bubbles', label: 'Bubble Drift',  sketch: bubbles   },
-    { key: 'stars',   label: 'Nebula',        sketch: stars     },
-  ] as const), []);
-
-  // —— 你已有的背景 p5 可以保留；此处只做内容区 ——
-
-  // 小进度点
-  const total = 6; // 根据你现有面板数量微调
-  const Dots = () => (
-    <div style={{display:'flex',gap:8,margin:'6px 0 14px'}}>
-      {Array.from({length: total}).map((_,i)=>(
-        <span key={i} style={{
-          width:8,height:8,borderRadius:999,
-          background: i<=step ? 'var(--grad2)' : 'rgba(255,255,255,.2)',
-          opacity: i===step?1:.6
-        }}/>
-      ))}
+/* ---------- tiny progress bar used inside steps ---------- */
+function StepProgress({ done, total, label }: { done: number; total: number; label: string }) {
+  const pct = Math.max(0, Math.min(100, Math.round((done / Math.max(1, total)) * 100)));
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div className="badge">{label}: {done}/{total}</div>
+      <div style={{ height: 8, borderRadius: 999, background: 'rgba(255,255,255,.08)', overflow: 'hidden', marginTop: 6 }}>
+        <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg,#7c8cff,#b36bff)' }} />
+      </div>
     </div>
   );
+}
 
-  // === 各面板 ===
-  const StepBreathing = (
-    <Panel title="Step 1 · 4-7-8 Breathing" tag="4-7-8">
-      {/* 你的呼吸球组件可以继续用；这里用占位圆环演示 */}
-      <div style={{display:'grid',placeItems:'center',height:300}}>
-        <div
-          aria-label="breathing-ball"
-          style={{
-            width:160,height:160,borderRadius:'50%',
-            background:'radial-gradient(circle at 40% 35%, #fff, #8a7bff33 60%, #0000)',
-            boxShadow:'inset 0 0 0 12px #8a7bff22, 0 0 40px #8a7bff55'
-          }}
-        />
-      </div>
-      <div style={{display:'flex',gap:10,alignItems:'center'}}>
-        <button className="btn" onClick={()=>setRounds(r=>Math.min(3,r+1))}>完成一轮</button>
-        <span className="muted">已完成：{rounds}/3</span>
-      </div>
-      <div style={{marginTop:14,display:'flex',justifyContent:'space-between'}}>
-        <button className="link" onClick={()=>setStep(s=>Math.max(0,s-1))}>Back</button>
-        <button className="btn" onClick={()=>setStep(s=>s+1)} disabled={rounds<3}>Continue</button>
-      </div>
-    </Panel>
-  );
+/* ------------------------------ Step 1 ------------------------------ */
+function BreathPanel({ onAutoNext }: { onAutoNext?: () => void }) {
+  const PHASES = [
+    { name: 'Inhale', ms: 4000 },
+    { name: 'Hold',   ms: 2000 },
+    { name: 'Exhale', ms: 8000 },
+    { name: 'Hold…',  ms: 2000 },
+  ] as const;
+  const CYCLE_MS = PHASES.reduce((s, p) => s + p.ms, 0);
+  const TARGET = 4;
 
-  const StepBodyScan = (
-    <Panel title="Step 2 · Body Scan (1–2 min)" tag="Guided">
-      <p className="muted" style={{marginTop:2}}>
-        从下颌、肩颈、胸腔、腹部到脚掌，按顺序轻轻注意与放松，呼吸进入相应区域。
-      </p>
-      {/* 你可以替换成 SVG 躯体的九区高亮版 */}
-      <div style={{height:220,display:'grid',placeItems:'center'}}>
-        <div style={{
-          width:280,height:180,borderRadius:16,backdropFilter:'blur(10px)',
-          border:'1px solid var(--border)',display:'grid',placeItems:'center'
-        }}>
-          <span className="muted">（此处可替换为你的 SVG 可视化身体扫描）</span>
-        </div>
-      </div>
-      <div style={{display:'flex',justifyContent:'space-between',marginTop:12}}>
-        <button className="link" onClick={()=>setStep(s=>Math.max(0,s-1))}>Back</button>
-        <button className="btn" onClick={()=>setStep(s=>s+1)}>Continue</button>
-      </div>
-    </Panel>
-  );
+  const [running, setRunning]   = React.useState<boolean>(false);
+  const [phaseIdx, setPhaseIdx] = React.useState<number>(0);
+  const [rounds, setRounds]     = React.useState<number>(0);
+  const [ringPct, setRingPct]   = React.useState<number>(0);
 
-  const StepJournaling = (
-    <Panel title="Step 3 · Journaling (1–3 min)" tag="Write">
-      <p className="muted" style={{marginTop:2}}>
-        写下当下最在意的两件事，并各加上一句「我可以控制的下一步是…」。
-      </p>
-      <textarea
-        value={note}
-        onChange={e=>setNote(e.target.value)}
-        placeholder="例如：我担心毕设进度。我可以控制的下一步是今晚完成 A 模块草图…"
-        style={{
-          width:'100%',height:160,resize:'vertical',borderRadius:12,
-          background:'#0e1320',border:'1px solid var(--border)',color:'var(--ink)',padding:12
-        }}
-      />
-      <div style={{display:'flex',justifyContent:'space-between',marginTop:12}}>
-        <button className="link" onClick={()=>setStep(s=>Math.max(0,s-1))}>Back</button>
-        <button className="btn" onClick={()=>setStep(s=>s+1)} disabled={note.trim().length<20}>Continue</button>
-      </div>
-    </Panel>
-  );
+  const tRef = React.useRef<number | null>(null);
+  const leftRef  = React.useRef<number>(PHASES[0].ms);
+  const idxRef   = React.useRef<number>(0);
+  const roundRef = React.useRef<number>(0);
 
-  const StepSummary = (
-    <Panel title="Step 4 · Summary" tag="Done">
-      <p>🎉 做得好！你完成了今晚的放松流程。</p>
-      <ul>
-        <li>呼吸轮次：{rounds}/3</li>
-        <li>书写字数：{note.trim().length}</li>
-      </ul>
-      <div style={{display:'flex',justifyContent:'space-between',marginTop:12}}>
-        <button className="link" onClick={()=>setStep(s=>Math.max(0,s-1))}>Back</button>
-        <button className="btn" onClick={()=>setStep(s=>s+1)}>Go to Calm Games</button>
-      </div>
-    </Panel>
-  );
+  const stop = (finished = false) => {
+    if (tRef.current) { window.clearInterval(tRef.current); tRef.current = null; }
+    setRunning(false);
+    if (finished) setRingPct(1);
+  };
 
-  // ===== 新增：睡前解压游戏 =====
-  const StepGames = (
-    <Panel title="Step 5 · Calm Games" tag="p5">
-      <p className="muted" style={{marginTop:2}}>挑一个你喜欢的舒缓小互动，玩 1–3 分钟再入睡。</p>
+  const start = () => {
+    stop();
+    idxRef.current = 0;
+    leftRef.current = PHASES[0].ms;
+    roundRef.current = 0;
+    setPhaseIdx(0);
+    setRounds(0);
+    setRingPct(0);
+    setRunning(true);
 
-      {/* 选择器：两排磁贴 */}
-      <div className="grid" style={{gridTemplateColumns:'repeat(3, 1fr)', gap:12}}>
-        {games.map(g=>(
-          <button
-            key={g.key}
-            onClick={()=>setGameKey(g.key)}
-            className="tile"
-            style={{
-              padding:10,borderRadius:12,border:'1px solid var(--border)',
-              background: gameKey===g.key ? '#1a1f30' : '#0d1220'
-            }}
-          >
-            <span style={{fontWeight:600}}>{g.label}</span>
-            <span className="muted" style={{fontSize:12}}>
-              {g.key==='flow' ? '流场舒缓线' : g.key==='bubbles' ? '泡泡漂流' : '星云粒子'}
-            </span>
-          </button>
-        ))}
-      </div>
+    tRef.current = window.setInterval(() => {
+      leftRef.current -= 100;
 
-      {/* 嵌入 p5 */}
-      <div style={{marginTop:12}}>
-        <P5Embed sketch={games.find(x=>x.key===gameKey)!.sketch} height={420}/>
-      </div>
+      const usedBefore = PHASES.slice(0, idxRef.current).reduce((s, p) => s + p.ms, 0);
+      const usedIn     = PHASES[idxRef.current].ms - Math.max(0, leftRef.current);
+      setRingPct(Math.min(1, (usedBefore + usedIn) / CYCLE_MS));
 
-      <div style={{display:'flex',justifyContent:'space-between',marginTop:12}}>
-        <button className="link" onClick={()=>setStep(s=>Math.max(0,s-1))}>Back</button>
-        <button className="btn" onClick={()=>setStep(s=>s+1)}>Finish</button>
-      </div>
-    </Panel>
-  );
+      if (leftRef.current <= 0) {
+        const next = (idxRef.current + 1) % PHASES.length;
+        idxRef.current = next;
+        leftRef.current = PHASES[next].ms;
+        setPhaseIdx(next);
 
-  const StepFinish = (
-    <Panel title="All Set · Good night ✨">
-      <p>如果喜欢，可在设置里把「Calm Games」设为默认结尾。</p>
-      <button className="btn" onClick={()=>setStep(0)}>Restart</button>
-    </Panel>
-  );
+        if (next === 0) {
+          const nr = roundRef.current + 1;
+          roundRef.current = nr;
+          setRounds(nr);
+          if (nr >= TARGET) {
+            stop(true);
+            onAutoNext?.();
+          }
+        }
+      }
+    }, 100);
+  };
 
-  const screens = [StepBreathing, StepBodyScan, StepJournaling, StepSummary, StepGames, StepFinish];
+  React.useEffect(() => () => stop(), []);
 
-  useEffect(()=>{ window.scrollTo({top:0, behavior:'smooth'}); },[step]);
+  const phase = PHASES[phaseIdx].name;
+  const R = 88, C = 2 * Math.PI * R, dash = Math.max(0.0001, C * ringPct);
 
   return (
-    <div className="container" style={{paddingTop:24, paddingBottom:40}}>
-      <h1 className="hero"><span className="grad">Relief · Sleep & Anxiety Care</span></h1>
-      <p className="muted">A guided wind-down. Each panel fades smoothly to the next.</p>
-      <Dots/>
-      {screens[step]}
+    <div>
+      <p className="muted">Follow the pulse: inhale 4s · hold 2s · exhale 8s · hold 2s. Do 4 rounds (auto Next), or press Next anytime.</p>
+
+      <div style={{ display:'grid', placeItems:'center' }}>
+        <div style={{ position:'relative', width:220, height:220 }}>
+          <svg width="220" height="220" style={{ position:'absolute', inset:0 }}>
+            <circle cx="110" cy="110" r={R} stroke="rgba(255,255,255,.1)" strokeWidth="12" fill="none" />
+            <circle
+              cx="110" cy="110" r={R} transform="rotate(-90 110 110)"
+              stroke="url(#g1)" strokeWidth="12" fill="none"
+              strokeDasharray={`${dash} ${C}`} strokeLinecap="round"
+            />
+            <defs>
+              <linearGradient id="g1" x1="0" x2="1">
+                <stop offset="0%"  stopColor="#7c8cff" />
+                <stop offset="100%" stopColor="#b36bff" />
+              </linearGradient>
+            </defs>
+          </svg>
+
+          <div
+            style={{
+              position:'absolute', inset:28, borderRadius:'50%',
+              background:'radial-gradient(100px 100px at 50% 45%, rgba(124,140,255,.35), transparent)',
+              transform:
+                phase === 'Inhale'       ? 'scale(1.06)' :
+                phase.startsWith('Hold') ? 'scale(1.02)' :
+                                           'scale(0.92)',
+              transition:'transform .6s ease'
+            }}
+          />
+
+          <div style={{ position:'absolute', inset:0, display:'grid', placeItems:'center', pointerEvents:'none' }}>
+            <div className="badge">{phase} · round {Math.min(rounds, TARGET)}/{TARGET}</div>
+          </div>
+        </div>
+      </div>
+
+      <StepProgress done={Math.min(rounds, TARGET)} total={TARGET} label="Rounds" />
+
+      <div className="row" style={{ justifyContent:'space-between', marginTop:12 }}>
+        <div />
+        {!running
+          ? <button className="btn" onClick={start}>{rounds > 0 ? 'Restart' : 'Start 4 rounds'}</button>
+          : <button className="btn" onClick={() => stop(false)}>Stop</button>}
+      </div>
     </div>
   );
+}
+
+/* ------------------------------ Step 2 ------------------------------ */
+function BodyScan({ onDoneCount }: { onDoneCount?: (n: number) => void }) {
+  const parts = [
+    'Forehead & jaw','Neck & shoulders','Chest & back',
+    'Arms & hands','Hips & thighs','Calves & feet'
+  ];
+  const [flags, setFlags] = React.useState<boolean[]>(() => Array(parts.length).fill(false));
+  const done = flags.filter(Boolean).length;
+
+  React.useEffect(() => { onDoneCount?.(done); }, [done, onDoneCount]);
+
+  return (
+    <div>
+      <p className="muted">From head to toe, pause ~10s for each area and soften tension. Check to mark done.</p>
+      <div style={{ display:'flex', gap:10, flexWrap:'wrap', marginTop:8 }}>
+        {parts.map((p, i) => {
+          const active = flags[i];
+          return (
+            <label key={p} className="badge" style={{
+              display:'inline-flex', alignItems:'center', gap:8, cursor:'pointer',
+              background: active ? 'rgba(124,140,255,.25)' : 'rgba(255,255,255,.06)',
+              border: active ? '1px solid rgba(124,140,255,.6)' : '1px solid rgba(255,255,255,.12)'
+            }}>
+              <input
+                type="checkbox"
+                checked={active}
+                onChange={() => setFlags(prev => {
+                  const next = [...prev];
+                  next[i] = !next[i];
+                  return next;
+                })}
+              />
+              {p}
+            </label>
+          );
+        })}
+      </div>
+      <StepProgress done={done} total={parts.length} label="Areas relaxed" />
+    </div>
+  );
+}
+
+/* ------------------------------ Page (8 steps) ------------------------------ */
+type Emotion =
+  | null
+  | { label: 'calm' | 'neutral' | 'stressed'; avgVolume: number; pitchHz: number; speakingRate?: number };
+
+export default function ReliefPage() {
+  const TOTAL = 8;
+  const [step, setStep] = React.useState<number>(1);
+  const [visitedMax, setVisitedMax] = React.useState<number>(1);
+
+  // step 3 sliders
+  const [anxiety, setAnxiety] = React.useState<number>(4);
+  const [tension, setTension] = React.useState<number>(4);
+  const [touched, setTouched] = React.useState<{a:boolean;t:boolean}>({a:false,t:false});
+
+  // step 4 audio
+  const [sound, setSound] = React.useState<'none'|'pink'|'rain'|'ocean'>('none');
+  const [isPlaying, setPlaying] = React.useState<boolean>(false);
+  const [elapsed, setElapsed] = React.useState<number>(0);
+  const audioRef = React.useRef<HTMLAudioElement | null>(null);
+  React.useEffect(() => {
+    let id: number | null = null;
+    if (isPlaying) id = window.setInterval(() => setElapsed(v => v + 1), 1000);
+    return () => { if (id) window.clearInterval(id); };
+  }, [isPlaying]);
+
+  // step 6 emotion
+  const [emo, setEmo] = React.useState<Emotion>(null);
+  const [readProgress, setReadProgress] = React.useState<number>(0);
+
+  // optional bg ?bg=...
+  const [bgUrl, setBgUrl] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const u = new URL(window.location.href);
+      const bg = u.searchParams.get('bg');
+      if (bg) setBgUrl(bg);
+    }
+  }, []);
+
+  React.useEffect(() => { setVisitedMax(m => Math.max(m, step)); }, [step]);
+
+  const goPrev = () => setStep(s => Math.max(1, s - 1));
+  const goNext = () => setStep(s => Math.min(TOTAL, s + 1));
+
+  const HeaderProgress = () => {
+    const pct = Math.round((visitedMax / TOTAL) * 100);
+    return (
+      <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+        <div className="badge">Step {step}/{TOTAL}</div>
+        <div className="badge">Completed {visitedMax}/{TOTAL}</div>
+        <div style={{ flex:1, height:8, borderRadius:999, background:'rgba(255,255,255,.08)', overflow:'hidden' }}>
+          <div style={{ width:`${pct}%`, height:'100%', background:'linear-gradient(90deg,#7c8cff,#b36bff)' }} />
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div>
+      {/* background */}
+      <div
+        className="scene"
+        style={{
+          backgroundImage: bgUrl
+            ? `url(${bgUrl})`
+            : 'linear-gradient(135deg,#0b0f17 0%,#171b28 60%,#0b0f17 100%)',
+        }}
+      />
+      <div className="scene-overlay" />
+
+      <div className="debate-wrap" style={{ maxWidth:980, margin:'0 auto' }}>
+        {/* header */}
+        <div className="panel glass">
+          <h2 style={{ margin:0 }}>
+            <span className="grad">Relief</span> · Sleep & Anxiety Care
+          </h2>
+          <p className="muted" style={{ marginTop:6 }}>
+            Guided steps with smooth transitions: paced breathing, body scan, quick self-check,
+            optional ambient sound, read-aloud prosody sensing, a gentle chat, then a soft close.
+          </p>
+          <HeaderProgress />
+        </div>
+
+        {/* main content (step panel + internal nav) */}
+        <div className="panel glass">
+          {/* STEP CONTENT */}
+          {step === 1 && (<>
+            <h3 style={{ marginTop:0 }}>Step 1 · Breathing (4-7-8)</h3>
+            <BreathPanel onAutoNext={() => setStep(2)} />
+          </>)}
+
+          {step === 2 && (<>
+            <h3 style={{ marginTop:0 }}>Step 2 · Body Scan</h3>
+            <BodyScan onDoneCount={() => { /* only show progress; Next is always available */ }} />
+          </>)}
+
+          {step === 3 && (<>
+            <h3 style={{ marginTop:0 }}>Step 3 · Self-check</h3>
+            <p className="muted">Lower is calmer; we’ll tailor next steps.</p>
+            <div className="row" style={{ marginTop:12 }}>
+              <div className="col panel glass">
+                <label>Anxiety (0–10)</label>
+                <input type="range" min={0} max={10} value={anxiety}
+                       onChange={e => { setAnxiety(Number(e.target.value)); setTouched(v => ({...v,a:true})); }} />
+                <div className="badge">Current: {anxiety}</div>
+              </div>
+              <div className="col panel glass">
+                <label>Muscle tension (0–10)</label>
+                <input type="range" min={0} max={10} value={tension}
+                       onChange={e => { setTension(Number(e.target.value)); setTouched(v => ({...v,t:true})); }} />
+                <div className="badge">Current: {tension}</div>
+              </div>
+            </div>
+            <StepProgress done={(touched.a?1:0)+(touched.t?1:0)} total={2} label="Checks completed" />
+          </>)}
+
+          {step === 4 && (<>
+            <h3 style={{ marginTop:0 }}>Step 4 · Ambient Sound (optional)</h3>
+            <p className="muted">Put mp3 files under <code>/public/sounds</code> to use playback.</p>
+            <div className="row" style={{ marginTop:12 }}>
+              <select className="input" style={{ maxWidth:260 }}
+                      value={sound} onChange={e => setSound(e.target.value as any)}>
+                <option value="none">No sound</option>
+                <option value="pink">Pink noise</option>
+                <option value="rain">Rain</option>
+                <option value="ocean">Ocean</option>
+              </select>
+              <button
+                className="btn"
+                onClick={() => {
+                  if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+                  const src = sound === 'none' ? '' : `/sounds/${sound}.mp3`;
+                  if (!src) return alert('No sound selected');
+                  const a = new Audio(src);
+                  audioRef.current = a;
+                  setElapsed(0);
+                  a.loop = true;
+                  a.play().then(() => setPlaying(true)).catch(() => alert('File missing or autoplay blocked'));
+                }}
+              >▶ Play</button>
+              <button className="btn" onClick={() => { setPlaying(false); setElapsed(0); audioRef.current?.pause(); audioRef.current = null; }}>⏹ Stop</button>
+              <div className="badge">{isPlaying ? 'Playing' : 'Idle'}</div>
+            </div>
+            <StepProgress done={Math.min(elapsed, 60)} total={60} label="Listening seconds" />
+          </>)}
+
+          {step === 5 && (<>
+            <h3 style={{ marginTop:0 }}>Step 5 · Calm mini</h3>
+            <CalmMini />
+          </>)}
+
+          {step === 6 && (<>
+            <h3 style={{ marginTop:0 }}>Step 6 · Read-aloud prosody</h3>
+            <ReadTimer seconds={20} onTick={setReadProgress} />
+            <ReadAndAnalyze
+              text={`When thoughts are heavy, I can let them pass.\nMy breath can be slow, my mind can be kind.\nI am allowed to rest.`}
+              seconds={20}
+              onDone={(res) => { setEmo(res); setStep(7); }}
+            />
+            <StepProgress done={readProgress} total={20} label="Reading seconds" />
+          </>)}
+
+          {step === 7 && (<>
+            <h3 style={{ marginTop:0 }}>Step 7 · Gentle chat</h3>
+            <p className="muted" style={{ marginTop:2 }}>
+              {emo?.label === 'stressed'
+                ? 'I sensed some tension in your voice. Want to unpack a little with me?'
+                : emo?.label === 'calm'
+                ? 'Your voice sounds steady. If anything still loops, let’s jot it down.'
+                : 'If something feels stuck, we can talk it through at your pace.'}
+            </p>
+            <ChatLite
+              systemHint={`You are a supportive, brief, and non-judgmental sleep coach.
+Avoid clinical claims. Speak in short, kind sentences.
+User’s prosody: label=${emo?.label ?? 'unknown'}, avgVolume=${emo?.avgVolume ?? 0}, pitchHz=${emo?.pitchHz ?? 0}, speakingRate=${emo?.speakingRate ?? 0}.
+Offer one tiny actionable suggestion, then ask a gentle follow-up.`}
+            />
+          </>)}
+
+          {step === 8 && (<>
+            <h3 style={{ marginTop:0 }}>Step 8 · Good night</h3>
+            <p className="muted">Great work today. Dim the screen, keep the breath soft. You can come back any time.</p>
+            <div className="row" style={{ marginTop:10 }}>
+              <button className="btn" onClick={() => setStep(1)}>Restart</button>
+              <button className="btn" onClick={() => (window.location.href = '/')}>Back to Home</button>
+            </div>
+          </>)}
+
+          {/* INTERNAL NAV (always visible & purple) */}
+          <div className="row" style={{ justifyContent:'space-between', marginTop:16 }}>
+            <button className="btn" onClick={() => setStep(s => Math.max(1, s - 1))} disabled={step===1} style={{ opacity: step===1 ? .5 : 1 }}>
+              ← Back
+            </button>
+            <button className="btn" onClick={() => setStep(s => Math.min(TOTAL, s + 1))}>
+              {step < TOTAL ? 'Next →' : 'Finish'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------- Step 5 mini check list ---------------------- */
+function CalmMini() {
+  const items = [
+    'Follow the bubble for 4 cycles',
+    'Drop the shoulders and unclench jaw',
+    'Soften gaze · lower screen brightness',
+  ];
+  const [done, setDone] = React.useState<Set<number>>(() => new Set());
+  return (
+    <div>
+      <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+        {items.map((t, i) => (
+          <label key={t} className="badge" style={{ display:'inline-flex', alignItems:'center', gap:8, cursor:'pointer' }}>
+            <input
+              type="checkbox"
+              checked={done.has(i)}
+              onChange={() => setDone(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; })}
+            />
+            {t}
+          </label>
+        ))}
+      </div>
+      <StepProgress done={done.size} total={items.length} label="Mini tasks" />
+    </div>
+  );
+}
+
+/* ---------------------- Step 6 reading timer ---------------------- */
+function ReadTimer({ seconds, onTick }: { seconds: number; onTick: (s:number)=>void }) {
+  React.useEffect(() => {
+    onTick(0);
+    let t = 0;
+    const id = window.setInterval(() => {
+      t += 1; onTick(Math.min(t, seconds));
+      if (t >= seconds) window.clearInterval(id);
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [seconds, onTick]);
+  return null;
 }
