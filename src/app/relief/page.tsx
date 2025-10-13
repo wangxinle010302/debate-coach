@@ -1,14 +1,15 @@
+// src/app/relief/page.tsx
 'use client';
 
 import * as React from 'react';
-import ReadAndAnalyze from '@/components/voice/ReadAndAnalyze';
-import ChatLite from '@/components/chat/ChatLite';
+// ⬇️ 用我们简单稳定的聊天组件，替换 ChatLite
+import GentleChatSimple from '@/components/chat/GentleChatSimple';
+import VoiceOpenAI from '@/components/voice/VoiceOpenAI';
 
 /* ================================
    Step 1 · Breathing (4-7-8) — RAF
    ================================ */
 function BreathPanel() {
-  // 不用 as const，避免 TS 把 ms 推断成 2000|4000|8000
   const PHASES: { name: string; ms: number }[] = [
     { name: 'Inhale', ms: 4000 },
     { name: 'Hold',   ms: 2000 },
@@ -18,7 +19,7 @@ function BreathPanel() {
   const CYCLE_MS = PHASES.reduce((s, p) => s + p.ms, 0);
   const TARGET_ROUNDS = 4;
 
-  const [running, setRunning] = React.useState<boolean>(false);
+  const [running, setRunning] = React.useState(false);
   const [phaseName, setPhaseName] = React.useState<string>('Inhale');
   const [rounds, setRounds] = React.useState<number>(0);
   const [ringPct, setRingPct] = React.useState<number>(0);
@@ -54,32 +55,28 @@ function BreathPanel() {
       if (!runRef.current) return;
       const last = lastTsRef.current;
       lastTsRef.current = ts;
-      const dt = last == null ? 0 : Math.min(50, ts - last); // 避免切 Tab 跳太多
+      const dt = last == null ? 0 : Math.min(50, ts - last);
 
       inPhaseRef.current += dt;
       const idx = phaseIdxRef.current;
       const curLen = PHASES[idx].ms;
 
-      // 环形进度
       const usedBefore = PHASES.slice(0, idx).reduce((s, p) => s + p.ms, 0);
       const usedInPhase = Math.min(inPhaseRef.current, curLen);
       setRingPct((usedBefore + usedInPhase) / CYCLE_MS);
 
-      // 切相位
       if (inPhaseRef.current >= curLen) {
         inPhaseRef.current -= curLen;
         const nextIdx = (idx + 1) % PHASES.length;
         phaseIdxRef.current = nextIdx;
         setPhaseName(PHASES[nextIdx].name);
 
-        // 回到 Inhale 记一轮
         if (nextIdx === 0) {
           roundsRef.current += 1;
           setRounds(Math.min(TARGET_ROUNDS, roundsRef.current));
           if (roundsRef.current >= TARGET_ROUNDS) {
             runRef.current = false;
             setRunning(false);
-            // 不强制跳；Next 在页脚永远可点
             return;
           }
         }
@@ -214,7 +211,6 @@ function BodyScan() {
 type GameKey = 'bubbles' | 'flow' | 'stars';
 
 function fallbackSketch(which: GameKey) {
-  // 非侵入式兜底 sketch（以防无法 import 你的 src/p5/*.ts）
   return (p: any) => {
     let t = 0;
     const stars: {x:number;y:number;z:number}[] = [];
@@ -222,7 +218,8 @@ function fallbackSketch(which: GameKey) {
       p.createCanvas(p.windowWidth, 420);
       if (which === 'stars') {
         for (let i = 0; i < 300; i++) stars.push({ x: p.random(-p.width, p.width), y: p.random(-p.height, p.height), z: p.random(p.width) });
-    } };
+      }
+    };
     p.draw = () => {
       if (which === 'flow') {
         p.background(8, 12, 20, 40);
@@ -322,11 +319,6 @@ function CalmGames() {
   );
 }
 
-/* ===== Types ===== */
-type Emotion =
-  | null
-  | { label: 'calm' | 'neutral' | 'stressed'; avgVolume: number; pitchHz: number; speakingRate?: number };
-
 /* =================
    Page Component
    ================= */
@@ -334,7 +326,6 @@ export default function ReliefPage() {
   const TOTAL = 8;
   const [step, setStep] = React.useState<number>(1);
   const [visitedMax, setVisitedMax] = React.useState<number>(1);
-
   React.useEffect(() => setVisitedMax(m => Math.max(m, step)), [step]);
 
   // Step3 sliders
@@ -381,8 +372,8 @@ export default function ReliefPage() {
   };
   React.useEffect(() => () => stopSound(), []);
 
-  // Step6 emotion
-  const [emo, setEmo] = React.useState<Emotion>(null);
+  // Step6 voice result → 给 Step7 作为上下文
+  const [voiceReport, setVoiceReport] = React.useState<{ transcript: string; feedback?: string } | null>(null);
 
   // 可选背景 ?bg=
   const [bgUrl, setBgUrl] = React.useState<string | null>(null);
@@ -427,7 +418,7 @@ export default function ReliefPage() {
           </h2>
           <p className="muted" style={{ marginTop:6 }}>
             Guided steps with smooth transitions: paced breathing, body scan, quick self-check, optional ambient sound,
-            read-aloud prosody sensing, a gentle chat, then a soft close.
+            read-aloud (OpenAI), a gentle chat, then a soft close.
           </p>
           <ProgressHeader />
         </div>
@@ -487,29 +478,25 @@ export default function ReliefPage() {
           )}
           {step === 6 && (
             <>
-              <h3 style={{ marginTop:0 }}>Step 6 · Read-aloud prosody</h3>
-              <ReadAndAnalyze
-                text={`When thoughts are heavy, I can let them pass.\nMy breath can be slow, my mind can be kind.\nI am allowed to rest.`}
-                seconds={20}
-                onDone={(res)=>{ setEmo(res); setStep(7); }}
-              />
+              <h3 style={{ marginTop:0 }}>Step 6 · Read-aloud (OpenAI)</h3>
+              <p className="muted" style={{ marginTop: 2 }}>
+                Press <b>Start</b>, read a short passage (30–60s), then <b>Stop</b>. We’ll transcribe with Whisper and generate brief feedback.
+              </p>
+              <VoiceOpenAI onDone={(r) => setVoiceReport(r)} />
             </>
           )}
           {step === 7 && (
             <>
               <h3 style={{ marginTop:0 }}>Step 7 · Gentle chat</h3>
               <p className="muted" style={{ marginTop:2 }}>
-                {emo?.label === 'stressed'
-                  ? 'I sensed some tension in your voice. Want to unpack a little with me?'
-                  : emo?.label === 'calm'
-                  ? 'Your voice sounds steady. If anything still loops, let’s jot it down.'
-                  : 'If something feels stuck, we can talk it through at your pace.'}
+                If something still loops, we can talk it through at your pace.
               </p>
-              <ChatLite
+              {/* ⬇️ 用我们自己的后端路由，避免卡省略号 */}
+              <GentleChatSimple
                 systemHint={`You are a supportive, brief, and non-judgmental sleep coach.
-Avoid clinical claims. Speak in short, kind sentences.
-User’s prosody: label=${emo?.label ?? 'unknown'}, avgVolume=${emo?.avgVolume ?? 0}, pitchHz=${emo?.pitchHz ?? 0}, speakingRate=${emo?.speakingRate ?? 0}.
-Offer one tiny actionable suggestion, then ask a gentle follow-up.`}
+Keep replies short. Offer one tiny actionable suggestion, then a gentle follow-up.
+User read-aloud (summary): ${voiceReport?.transcript?.slice(0, 160) ?? 'n/a'}
+Coach feedback hint: ${voiceReport?.feedback?.slice(0, 160) ?? 'n/a'}`}
               />
             </>
           )}
@@ -525,12 +512,12 @@ Offer one tiny actionable suggestion, then ask a gentle follow-up.`}
           )}
         </div>
 
-        {/* Footer nav — always visible/enabled except at ends */}
+        {/* Footer nav — 始终可点 */}
         <div className="row" style={{ position:'sticky', bottom:12, zIndex:5, justifyContent:'space-between', paddingTop:8, backdropFilter:'blur(4px)' }}>
-          <button className="btn" onClick={()=>setStep(s=>Math.max(1, s-1))} disabled={step===1} style={{ opacity: step===1 ? .5 : 1 }}>
+          <button className="btn" onClick={()=>setStep(s=>Math.max(1, s-1))} style={{ opacity: step===1 ? .5 : 1 }} disabled={step===1}>
             ← Back
           </button>
-          <button className="btn" onClick={()=>setStep(s=>Math.min(TOTAL, s+1))} disabled={step===TOTAL} style={{ opacity: step===TOTAL ? .5 : 1 }}>
+          <button className="btn" onClick={()=>setStep(s=>Math.min(TOTAL, s+1))} style={{ opacity: step===TOTAL ? .5 : 1 }} disabled={step===TOTAL}>
             {step < TOTAL ? 'Next →' : 'Finish'}
           </button>
         </div>
